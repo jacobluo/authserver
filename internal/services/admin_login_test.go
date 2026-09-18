@@ -176,6 +176,28 @@ func TestAdminLogin_CurrentDeniesAdminDisabledAfterLogin(t *testing.T) {
 	}
 }
 
+func TestAdminLogin_DeniesNonLocalAdminAtLoginAndCurrent(t *testing.T) {
+	ctx := context.Background()
+	stores := testdata.SetupTestStores(t)
+	nonLocalAdmin := &user.User{ID: "admin-oidc", Email: "admin@example.test", Role: user.RoleAdmin, Status: user.StatusActive, Provider: user.ProviderOIDC}
+	svc := services.NewAdminLoginService(staticAdminAuth{user: nonLocalAdmin}, stores.User, stores.AdminSession, []byte("test-admin-csrf-key"))
+	if err := stores.User.Create(ctx, nonLocalAdmin); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, err := svc.Login(ctx, nonLocalAdmin.Email, "irrelevant"); !errors.Is(err, input.ErrAdminLoginDenied) {
+		t.Fatalf("Login error = %v, want ErrAdminLoginDenied", err)
+	}
+	token := "non-local-session"
+	if err := stores.AdminSession.Create(ctx, output.AdminSessionRecord{TokenHash: adminTokenHash(token), UserID: nonLocalAdmin.ID, ExpiresAt: time.Now().UTC().Add(time.Hour)}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := svc.Current(ctx, token); !errors.Is(err, input.ErrAdminSessionInvalid) {
+		t.Fatalf("Current error = %v, want ErrAdminSessionInvalid", err)
+	}
+}
+
 func TestAdminLogin_PreservesAuthenticationBackendFailure(t *testing.T) {
 	stores := testdata.SetupTestStores(t)
 	backendErr := errors.New("database unavailable")
@@ -215,6 +237,15 @@ func (a failingAdminAuth) Authenticate(context.Context, string, string) (*user.U
 }
 func (a failingAdminAuth) GetByID(context.Context, string) (*user.User, error) {
 	return nil, domain.ErrUserNotFound
+}
+
+type staticAdminAuth struct{ user *user.User }
+
+func (a staticAdminAuth) Authenticate(context.Context, string, string) (*user.User, error) {
+	return a.user, nil
+}
+func (a staticAdminAuth) GetByID(context.Context, string) (*user.User, error) {
+	return a.user, nil
 }
 
 type failingAdminUserStore struct {

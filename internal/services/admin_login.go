@@ -48,7 +48,7 @@ func (s *AdminLoginService) Login(ctx context.Context, email, password string) (
 		}
 		return "", nil, fmt.Errorf("authenticate admin: %w", err)
 	}
-	if u == nil || !u.IsActive() || !u.IsAdmin() {
+	if u == nil || !u.IsLocal() || !u.IsActive() || !u.IsAdmin() {
 		return "", nil, input.ErrAdminLoginDenied
 	}
 
@@ -84,7 +84,7 @@ func (s *AdminLoginService) Current(ctx context.Context, cookieToken string) (*i
 		}
 		return nil, fmt.Errorf("get admin session user: %w", err)
 	}
-	if u == nil || !u.IsActive() || !u.IsAdmin() {
+	if u == nil || !u.IsLocal() || !u.IsActive() || !u.IsAdmin() {
 		return nil, input.ErrAdminSessionInvalid
 	}
 	return s.account(u, cookieToken, record.ExpiresAt), nil
