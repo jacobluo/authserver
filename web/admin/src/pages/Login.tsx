@@ -1,37 +1,44 @@
 import { useState, FormEvent } from "react";
 import { C, fonts, sz, alpha } from "../tokens";
-import { setApiKey, verifyAuth } from "../api";
+import { clearApiKey, loginWithPassword, setApiKey, verifyAuth } from "../api";
 
 interface LoginProps {
   onLogin: () => void;
 }
 
 export default function Login({ onLogin }: LoginProps) {
+  const [mode, setMode] = useState<"account" | "key">("account");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [key, setKey] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!key.trim()) return;
+    if (mode === "account" && (!email.trim() || !password)) return;
+    if (mode === "key" && !key.trim()) return;
 
     setLoading(true);
     setError("");
 
-    // Store the key first so verifyAuth can use it.
-    setApiKey(key.trim());
-
     try {
-      const res = await verifyAuth();
-      if (res.valid) {
+      if (mode === "account") {
+        await loginWithPassword(email.trim(), password);
         onLogin();
       } else {
-        setError("Invalid API key");
-        setApiKey("");
+        setApiKey(key.trim());
+        const res = await verifyAuth();
+        if (res.valid) {
+          onLogin();
+        } else {
+          setError("Invalid API key");
+          clearApiKey();
+        }
       }
     } catch {
-      setError("Invalid API key or server unreachable");
-      setApiKey("");
+      setError(mode === "account" ? "Invalid email, password, or server unreachable" : "Invalid API key or server unreachable");
+      clearApiKey();
     } finally {
       setLoading(false);
     }
@@ -74,7 +81,28 @@ export default function Login({ onLogin }: LoginProps) {
           </div>
         </div>
 
+        <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+          <button type="button" onClick={() => { setMode("account"); setError(""); }} style={{ flex: 1, padding: "8px 10px", background: mode === "account" ? alpha(C.accent, 0x20) : "transparent", color: mode === "account" ? C.accent : C.textDim, border: `1px solid ${mode === "account" ? alpha(C.accent, 0x50) : C.border}`, borderRadius: 6, cursor: "pointer", fontFamily: fonts.mono }}>
+            Account Login
+          </button>
+          <button type="button" onClick={() => { setMode("key"); setError(""); }} style={{ flex: 1, padding: "8px 10px", background: mode === "key" ? alpha(C.accent, 0x20) : "transparent", color: mode === "key" ? C.accent : C.textDim, border: `1px solid ${mode === "key" ? alpha(C.accent, 0x50) : C.border}`, borderRadius: 6, cursor: "pointer", fontFamily: fonts.mono }}>
+            Use API Key
+          </button>
+        </div>
+
         <form onSubmit={handleSubmit}>
+          {mode === "account" ? (
+            <>
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ display: "block", fontSize: sz.xs, fontFamily: fonts.mono, textTransform: "uppercase", letterSpacing: 1.2, color: C.textDim, marginBottom: 6 }}>Email</label>
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="admin@example.com" autoFocus style={{ width: "100%", padding: "10px 14px", background: C.surface2, border: `1px solid ${error ? C.danger : C.border2}`, borderRadius: 6, color: C.text, fontSize: sz.base, fontFamily: fonts.mono, outline: "none", boxSizing: "border-box" }} />
+              </div>
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ display: "block", fontSize: sz.xs, fontFamily: fonts.mono, textTransform: "uppercase", letterSpacing: 1.2, color: C.textDim, marginBottom: 6 }}>Password</label>
+                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter password" style={{ width: "100%", padding: "10px 14px", background: C.surface2, border: `1px solid ${error ? C.danger : C.border2}`, borderRadius: 6, color: C.text, fontSize: sz.base, fontFamily: fonts.mono, outline: "none", boxSizing: "border-box" }} />
+              </div>
+            </>
+          ) : (
           <div style={{ marginBottom: 16 }}>
             <label
               style={{
@@ -110,6 +138,7 @@ export default function Login({ onLogin }: LoginProps) {
               }}
             />
           </div>
+          )}
 
           {error && (
             <div
@@ -126,7 +155,7 @@ export default function Login({ onLogin }: LoginProps) {
 
           <button
             type="submit"
-            disabled={loading || !key.trim()}
+            disabled={loading || (mode === "account" ? !email.trim() || !password : !key.trim())}
             style={{
               width: "100%",
               padding: "10px 16px",
@@ -137,13 +166,13 @@ export default function Login({ onLogin }: LoginProps) {
               color: C.accent,
               border: `1px solid ${alpha(C.accent, 0x50)}`,
               borderRadius: 6,
-              cursor: loading || !key.trim() ? "not-allowed" : "pointer",
-              opacity: loading || !key.trim() ? 0.5 : 1,
+              cursor: loading || (mode === "account" ? !email.trim() || !password : !key.trim()) ? "not-allowed" : "pointer",
+              opacity: loading || (mode === "account" ? !email.trim() || !password : !key.trim()) ? 0.5 : 1,
               transition: "all 0.15s",
               letterSpacing: 0.3,
             }}
           >
-            {loading ? "Verifying…" : "Sign In"}
+            {loading ? "Signing in…" : "Sign In"}
           </button>
         </form>
 
@@ -157,7 +186,7 @@ export default function Login({ onLogin }: LoginProps) {
             lineHeight: 1.6,
           }}
         >
-          Use the API key from your server configuration.
+          {mode === "account" ? "Sign in with an administrator account." : "Use the API key from your server configuration."}
         </div>
       </div>
     </div>

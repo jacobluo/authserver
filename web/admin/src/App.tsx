@@ -1,8 +1,8 @@
-import { useState, ReactNode } from "react";
+import { useEffect, useState, ReactNode } from "react";
 import { HashRouter, Routes, Route, NavLink, Navigate } from "react-router-dom";
 import { C, fonts, sz, alpha, applyTheme, applySizeScale, getTheme, getSizeScale } from "./tokens";
 import type { Theme, SizeScale } from "./tokens";
-import { getApiKey, clearApiKey } from "./api";
+import { getCurrentAccount, logout, onAuthenticationFailure } from "./api";
 import Login from "./pages/Login";
 import Overview from "./pages/Overview";
 import Clients from "./pages/Clients";
@@ -624,13 +624,44 @@ function Layout({ children, onLogout }: LayoutProps) {
 /* ------------------------------------------------------------------ */
 
 export default function App() {
-  const [authed, setAuthed] = useState(!!getApiKey());
+  const [authed, setAuthed] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    const unsubscribe = onAuthenticationFailure(() => {
+      if (active) setAuthed(false);
+    });
+
+    void getCurrentAccount()
+      .then((account) => {
+        if (active) setAuthed(!!account);
+      })
+      .catch(() => {
+        if (active) setAuthed(false);
+      })
+      .finally(() => {
+        if (active) setCheckingSession(false);
+      });
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, []);
 
   const handleLogin = () => setAuthed(true);
-  const handleLogout = () => {
-    clearApiKey();
-    setAuthed(false);
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } finally {
+      setAuthed(false);
+    }
   };
+
+  if (checkingSession) {
+    return <div style={{ padding: 28, color: C.textDim, fontFamily: fonts.mono }}>Checking session…</div>;
+  }
 
   if (!authed) {
     return <Login onLogin={handleLogin} />;

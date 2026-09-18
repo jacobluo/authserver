@@ -1,0 +1,45 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { createRequire, Module } from "node:module";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
+import test from "node:test";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import ts from "typescript";
+
+const projectDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const require = createRequire(import.meta.url);
+
+for (const extension of [".ts", ".tsx"]) {
+  Module._extensions[extension] = (module, filename) => {
+    const source = readFileSync(filename, "utf8");
+    const compiled = ts.transpileModule(source, {
+      fileName: filename,
+      compilerOptions: {
+        jsx: ts.JsxEmit.ReactJSX,
+        module: ts.ModuleKind.CommonJS,
+        target: ts.ScriptTarget.ES2022,
+      },
+    });
+    module._compile(compiled.outputText, filename);
+  };
+}
+
+test("login defaults to account credentials with an API key fallback", () => {
+  const Login = require(resolve(projectDir, "src/pages/Login.tsx")).default;
+  const html = renderToStaticMarkup(createElement(Login, { onLogin() {} }));
+
+  assert.match(html, /Email/);
+  assert.match(html, /Password/);
+  assert.match(html, /Use API Key/);
+});
+
+test("admin authentication credentials remain in memory and cookie writes carry CSRF", () => {
+  const api = readFileSync(resolve(projectDir, "src/api.ts"), "utf8");
+
+  assert.doesNotMatch(api, /sessionStorage/);
+  assert.doesNotMatch(api, /localStorage/);
+  assert.match(api, /credentials:\s*["']same-origin["']/);
+  assert.match(api, /headers\.set\(["']X-Admin-CSRF["']/);
+});
