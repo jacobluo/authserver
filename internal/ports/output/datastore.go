@@ -16,6 +16,7 @@ type DataStore interface {
 	RuntimeSettings() RuntimeSettingsStore
 	IDP() IDPStore
 	AssertionJTI() AssertionJTIStore
+	AdminSession() AdminSessionStore
 	XAAPolicy() XAAPolicyStore
 	SubjectMapping() SubjectMappingStore
 	Transaction() TransactionManager
