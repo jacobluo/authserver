@@ -88,10 +88,11 @@ func (h *adminLoginHandler) handleLogin(w http.ResponseWriter, r *http.Request) 
 		writeAdminError(w, http.StatusBadRequest, "invalid request")
 		return
 	}
-	email := strings.ToLower(strings.TrimSpace(body.Email))
+	email := strings.TrimSpace(body.Email)
+	lockoutKey := strings.ToLower(email)
 	ip := adminPeerIP(r)
 	if h.lockout != nil {
-		if _, locked := h.lockout.LockedUntil(email, ip); locked {
+		if _, locked := h.lockout.LockedUntil(lockoutKey, ip); locked {
 			writeAdminError(w, http.StatusUnauthorized, "login denied")
 			return
 		}
@@ -99,7 +100,7 @@ func (h *adminLoginHandler) handleLogin(w http.ResponseWriter, r *http.Request) 
 	token, account, err := h.login.Login(r.Context(), email, body.Password)
 	if errors.Is(err, input.ErrAdminLoginDenied) {
 		if h.lockout != nil {
-			h.lockout.RecordFailure(email, ip)
+			h.lockout.RecordFailure(lockoutKey, ip)
 		}
 		writeAdminError(w, http.StatusUnauthorized, "login denied")
 		return
@@ -109,7 +110,7 @@ func (h *adminLoginHandler) handleLogin(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if h.lockout != nil {
-		h.lockout.Reset(email, ip)
+		h.lockout.Reset(lockoutKey, ip)
 	}
 	maxAge := int(time.Until(account.ExpiresAt).Seconds())
 	if maxAge <= 0 {

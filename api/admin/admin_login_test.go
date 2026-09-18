@@ -177,6 +177,38 @@ func TestAdminAccountJourney(t *testing.T) {
 	}
 }
 
+// This fails if the HTTP handler case-folds the email passed to the login
+// service: AdminService persists legacy administrator emails verbatim and the
+// user store deliberately distinguishes case-variant identities.
+func TestAdminAccountLogin_ExistingMixedCaseEmail(t *testing.T) {
+	stores := testdata.SetupTestStores(t)
+	obs := observability.NewNoop()
+	admin := services.NewAdminService(stores.Client, stores.User, stores.Token, stores.Audit, obs, nil)
+	account, err := admin.CreateUser(context.Background(), input.CreateUserRequest{
+		Email: "Operator@Example.test", Password: "mixed-case-password", Name: "Operator", Role: "admin",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	login := services.NewAdminLoginService(services.NewUserAuthService(stores.User, obs, nil), stores.User, stores.AdminSession, []byte("mixed-case-csrf-key"))
+	h := mustNewServer(t, config.AdminConfig{APIKey: "test-key"}, admin, obs, apiadmin.OptionalDeps{AdminLogin: login}).Handler()
+
+	response := loginRequest(h, "POST", "/admin/auth/login", `{"email":"Operator@Example.test","password":"mixed-case-password"}`, "application/json", "http://admin.example.test", "", "", nil)
+	if response.Code != http.StatusOK {
+		t.Fatalf("exact stored mixed-case email login: %d %s", response.Code, response.Body)
+	}
+	var identity struct {
+		ID    string `json:"id"`
+		Email string `json:"email"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &identity); err != nil {
+		t.Fatal(err)
+	}
+	if identity.ID != account.ID || identity.Email != "Operator@Example.test" {
+		t.Fatalf("identity: %s", response.Body)
+	}
+}
+
 func TestAdminAccountLogin_CookieAndMeAndLogout(t *testing.T) {
 	for _, secure := range []bool{false, true} {
 		t.Run(map[bool]string{false: "http", true: "https"}[secure], func(t *testing.T) {
@@ -185,7 +217,7 @@ func TestAdminAccountLogin_CookieAndMeAndLogout(t *testing.T) {
 			if secure {
 				origin = "https://admin.example.test"
 			}
-			w := loginRequest(f.h, "POST", "/admin/auth/login", `{"email":" ADMIN@example.test ","password":"correct-password"}`, "application/json", origin, "", "", nil)
+			w := loginRequest(f.h, "POST", "/admin/auth/login", `{"email":" admin@example.test ","password":"correct-password"}`, "application/json", origin, "", "", nil)
 			if w.Code != 200 {
 				t.Fatalf("login: %d %s", w.Code, w.Body)
 			}
