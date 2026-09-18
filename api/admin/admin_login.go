@@ -80,11 +80,11 @@ func (h *adminLoginHandler) handleLogin(w http.ResponseWriter, r *http.Request) 
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 16*1024)
 	decoder := json.NewDecoder(r.Body)
-	if err := decoder.Decode(&body); err != nil || body == nil {
+	if decodeErr := decoder.Decode(&body); decodeErr != nil || body == nil {
 		writeAdminError(w, http.StatusBadRequest, "invalid request")
 		return
 	}
-	if err := decoder.Decode(new(any)); err != io.EOF {
+	if decodeErr := decoder.Decode(new(any)); decodeErr != io.EOF {
 		writeAdminError(w, http.StatusBadRequest, "invalid request")
 		return
 	}
