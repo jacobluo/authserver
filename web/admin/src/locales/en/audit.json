@@ -1,0 +1,20 @@
+{
+  "title": "Audit Log",
+  "loadFailed": "Failed to load audit events",
+  "eventCount": "{{total}} events",
+  "autoRefresh": "30s auto-refresh",
+  "paused": "paused",
+  "live": "● Live",
+  "pausedButton": "○ Paused",
+  "refresh": "Refresh",
+  "actionPlaceholder": "Filter by action…",
+  "actorPlaceholder": "Filter by actor ID…",
+  "timestamp": "Timestamp",
+  "event": "Event",
+  "actor": "Actor",
+  "detail": "Detail",
+  "actorId": "Actor ID",
+  "actorType": "Actor Type",
+  "clientId": "Client ID",
+  "noEvents": "No audit events found."
+}

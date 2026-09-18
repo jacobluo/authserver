@@ -1,12 +1,14 @@
 import { useState, FormEvent } from "react";
 import { C, fonts, sz, alpha } from "../tokens";
 import { clearApiKey, loginWithPassword, setApiKey, verifyAuth } from "../api";
+import { useTranslation } from "../i18n";
 
 interface LoginProps {
   onLogin: () => void;
 }
 
 export default function Login({ onLogin }: LoginProps) {
+  const { t } = useTranslation("login");
   const [mode, setMode] = useState<"account" | "key">("account");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -32,12 +34,12 @@ export default function Login({ onLogin }: LoginProps) {
         if (res.valid) {
           onLogin();
         } else {
-          setError("Invalid API key");
+          setError(t("invalidApiKey"));
           clearApiKey();
         }
       }
     } catch {
-      setError(mode === "account" ? "Invalid email, password, or server unreachable" : "Invalid API key or server unreachable");
+      setError(mode === "account" ? t("invalidCredentials") : t("invalidApiKeyOrServer"));
       clearApiKey();
     } finally {
       setLoading(false);
@@ -77,16 +79,16 @@ export default function Login({ onLogin }: LoginProps) {
             authplane
           </div>
           <div style={{ fontFamily: fonts.mono, fontSize: sz.sm, color: C.textDim }}>
-            admin console
+            {t("subtitle")}
           </div>
         </div>
 
         <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
           <button type="button" onClick={() => { setMode("account"); setError(""); }} style={{ flex: 1, padding: "8px 10px", background: mode === "account" ? alpha(C.accent, 0x20) : "transparent", color: mode === "account" ? C.accent : C.textDim, border: `1px solid ${mode === "account" ? alpha(C.accent, 0x50) : C.border}`, borderRadius: 6, cursor: "pointer", fontFamily: fonts.mono }}>
-            Account Login
+            {t("accountLogin")}
           </button>
           <button type="button" onClick={() => { setMode("key"); setError(""); }} style={{ flex: 1, padding: "8px 10px", background: mode === "key" ? alpha(C.accent, 0x20) : "transparent", color: mode === "key" ? C.accent : C.textDim, border: `1px solid ${mode === "key" ? alpha(C.accent, 0x50) : C.border}`, borderRadius: 6, cursor: "pointer", fontFamily: fonts.mono }}>
-            Use API Key
+            {t("useApiKey")}
           </button>
         </div>
 
@@ -94,12 +96,12 @@ export default function Login({ onLogin }: LoginProps) {
           {mode === "account" ? (
             <>
               <div style={{ marginBottom: 16 }}>
-                <label style={{ display: "block", fontSize: sz.xs, fontFamily: fonts.mono, textTransform: "uppercase", letterSpacing: 1.2, color: C.textDim, marginBottom: 6 }}>Email</label>
-                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="admin@example.com" autoFocus style={{ width: "100%", padding: "10px 14px", background: C.surface2, border: `1px solid ${error ? C.danger : C.border2}`, borderRadius: 6, color: C.text, fontSize: sz.base, fontFamily: fonts.mono, outline: "none", boxSizing: "border-box" }} />
+                <label style={{ display: "block", fontSize: sz.xs, fontFamily: fonts.mono, textTransform: "uppercase", letterSpacing: 1.2, color: C.textDim, marginBottom: 6 }}>{t("email")}</label>
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder={t("emailPlaceholder")} autoFocus style={{ width: "100%", padding: "10px 14px", background: C.surface2, border: `1px solid ${error ? C.danger : C.border2}`, borderRadius: 6, color: C.text, fontSize: sz.base, fontFamily: fonts.mono, outline: "none", boxSizing: "border-box" }} />
               </div>
               <div style={{ marginBottom: 16 }}>
-                <label style={{ display: "block", fontSize: sz.xs, fontFamily: fonts.mono, textTransform: "uppercase", letterSpacing: 1.2, color: C.textDim, marginBottom: 6 }}>Password</label>
-                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter password" style={{ width: "100%", padding: "10px 14px", background: C.surface2, border: `1px solid ${error ? C.danger : C.border2}`, borderRadius: 6, color: C.text, fontSize: sz.base, fontFamily: fonts.mono, outline: "none", boxSizing: "border-box" }} />
+                <label style={{ display: "block", fontSize: sz.xs, fontFamily: fonts.mono, textTransform: "uppercase", letterSpacing: 1.2, color: C.textDim, marginBottom: 6 }}>{t("password")}</label>
+                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={t("passwordPlaceholder")} style={{ width: "100%", padding: "10px 14px", background: C.surface2, border: `1px solid ${error ? C.danger : C.border2}`, borderRadius: 6, color: C.text, fontSize: sz.base, fontFamily: fonts.mono, outline: "none", boxSizing: "border-box" }} />
               </div>
             </>
           ) : (
@@ -115,13 +117,13 @@ export default function Login({ onLogin }: LoginProps) {
                 marginBottom: 6,
               }}
             >
-              API Key
+              {t("apiKey")}
             </label>
             <input
               type="password"
               value={key}
               onChange={(e) => setKey(e.target.value)}
-              placeholder="Enter admin API key"
+              placeholder={t("apiKeyPlaceholder")}
               autoFocus
               style={{
                 width: "100%",
@@ -172,7 +174,7 @@ export default function Login({ onLogin }: LoginProps) {
               letterSpacing: 0.3,
             }}
           >
-            {loading ? "Signing in…" : "Sign In"}
+            {loading ? t("signingIn") : t("signIn")}
           </button>
         </form>
 
@@ -186,7 +188,7 @@ export default function Login({ onLogin }: LoginProps) {
             lineHeight: 1.6,
           }}
         >
-          {mode === "account" ? "Sign in with an administrator account." : "Use the API key from your server configuration."}
+          {mode === "account" ? t("accountHint") : t("apiKeyHint")}
         </div>
       </div>
     </div>

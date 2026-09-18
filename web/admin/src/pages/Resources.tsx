@@ -38,6 +38,7 @@ import Drawer from "../components/Drawer";
 import Modal from "../components/Modal";
 import Toast from "../components/Toast";
 import InfoBox from "../components/InfoBox";
+import { useTranslation } from "../i18n";
 
 interface ScopeRow {
   name: string;
@@ -111,6 +112,7 @@ const scopesFromForm = (rows: ScopeRow[], kind: BackendKind): ScopeView[] =>
     .filter((s) => s.name !== "");
 
 export default function Resources() {
+  const { t } = useTranslation("resources");
   const [resources, setResources] = useState<ResourceView[]>([]);
   const [providers, setProviders] = useState<BrokerProviderView[]>([]);
   const [clients, setClients] = useState<ClientView[]>([]);
@@ -162,9 +164,9 @@ export default function Resources() {
       setClients(cs);
       setError("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load resources");
+      setError(err instanceof Error ? err.message : t("loadFailed"));
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -309,26 +311,26 @@ export default function Resources() {
 
   const validate = (): boolean => {
     const e: Record<string, string> = {};
-    if (!form.slug.trim()) e.slug = "Slug is required";
-    if (!form.uri.trim()) e.uri = "URI is required";
+    if (!form.slug.trim()) e.slug = t("slugRequired");
+    if (!form.uri.trim()) e.uri = t("uriRequired");
     else {
       try {
         const u = new URL(form.uri.trim());
-        if (!["http:", "https:"].includes(u.protocol)) e.uri = "Must be an http or https URL";
+        if (!["http:", "https:"].includes(u.protocol)) e.uri = t("uriHttpRequired");
       } catch {
-        e.uri = "Must be a valid URL";
+        e.uri = t("uriInvalid");
       }
     }
-    if (!form.display_name.trim()) e.display_name = "Display name is required";
+    if (!form.display_name.trim()) e.display_name = t("nameRequired");
     if (form.backend_kind === "broker" && !form.broker_provider_id) {
-      e.broker_provider_id = "Provider is required for broker resources";
+      e.broker_provider_id = t("providerRequired");
     }
     const cleanScopes = form.scopes.filter((s) => s.name.trim() !== "");
-    if (cleanScopes.length === 0) e.scopes = "At least one scope is required";
+    if (cleanScopes.length === 0) e.scopes = t("scopeRequired");
     const seen = new Set<string>();
     for (const s of cleanScopes) {
       if (seen.has(s.name.trim())) {
-        e.scopes = `Duplicate scope name '${s.name.trim()}'`;
+        e.scopes = t("duplicateScope", { name: s.name.trim() });
         break;
       }
       seen.add(s.name.trim());
@@ -336,7 +338,7 @@ export default function Resources() {
     if (form.backend_kind === "broker") {
       for (const s of cleanScopes) {
         if (s.upstream.trim() === "") {
-          e.scopes = `Scope '${s.name.trim()}' needs an upstream mapping for broker resources`;
+          e.scopes = t("scopeNeedsUpstream", { name: s.name.trim() });
           break;
         }
       }
@@ -368,11 +370,11 @@ export default function Resources() {
     }
     try {
       await createResource(req);
-      showToast(`Resource "${req.slug}" created`);
+      showToast(t("created", { slug: req.slug }));
       closeEditor();
       load();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to create resource", "error");
+      showToast(err instanceof Error ? err.message : t("createFailed"), "error");
     }
   };
 
@@ -411,16 +413,16 @@ export default function Resources() {
       patch.policy = policy;
     }
     if (Object.keys(patch).length === 0) {
-      showToast("No changes to save");
+      showToast(t("noChanges"));
       return;
     }
     try {
       await patchResource(target.id, patch);
-      showToast("Resource updated");
+      showToast(t("updated"));
       closeEditor();
       load();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to update", "error");
+      showToast(err instanceof Error ? err.message : t("updateFailed"), "error");
     }
   };
 
@@ -428,7 +430,7 @@ export default function Resources() {
     if (!delTarget) return;
     try {
       await deleteResource(delTarget.id);
-      showToast("Resource deleted");
+      showToast(t("deleted"));
       setDelTarget(null);
       setDelInput("");
       load();
@@ -447,7 +449,7 @@ export default function Resources() {
         return;
       }
       showToast(
-        err instanceof Error ? err.message : "Failed to delete",
+        err instanceof Error ? err.message : t("deleteFailed"),
         "error",
       );
     }
@@ -458,15 +460,13 @@ export default function Resources() {
     try {
       await deleteResource(cascadeModal.target.id, { cascade: true });
       showToast(
-        `Resource deleted (${cascadeModal.dependents.length} fronting link${
-          cascadeModal.dependents.length === 1 ? "" : "s"
-        } cascaded)`,
+        t("cascadeDeleted", { count: cascadeModal.dependents.length }),
       );
       setCascadeModal(null);
       load();
     } catch (err) {
       showToast(
-        err instanceof Error ? err.message : "Failed to cascade-delete",
+        err instanceof Error ? err.message : t("cascadeDeleteFailed"),
         "error",
       );
       setCascadeModal(null);
@@ -492,7 +492,7 @@ export default function Resources() {
     <span>
       {r.display_name || <span style={{ color: C.textDim }}>{"—"}</span>}
     </span>,
-    <Tag color={r.backend_kind === "mint" ? C.blue : C.purple}>{r.backend_kind}</Tag>,
+    <Tag color={r.backend_kind === "mint" ? C.blue : C.purple}>{t(`backendValue.${r.backend_kind}`)}</Tag>,
     <Mono>{r.uri}</Mono>,
     <span>
       {r.backend_kind === "broker"
@@ -507,9 +507,9 @@ export default function Resources() {
   return (
     <div style={{ padding: 28 }}>
       <div style={{ marginBottom: 20 }}>
-        <div style={{ fontFamily: fonts.mono, fontSize: sz.xl, fontWeight: 600 }}>Resources</div>
+        <div style={{ fontFamily: fonts.mono, fontSize: sz.xl, fontWeight: 600 }}>{t("title")}</div>
         <div style={{ fontSize: sz.base, color: C.textDim, marginTop: 2 }}>
-          Mint resources (Authplane mints tokens) and Broker resources (Authplane brokers an upstream credential).
+          {t("subtitle")}
         </div>
       </div>
 
@@ -522,7 +522,7 @@ export default function Resources() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, gap: 10, flexWrap: "wrap" }}>
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
           <div style={{ width: 280 }}>
-            <TextInput placeholder="Search by slug, URI, name, or provider…" value={search} onChange={setSearch} />
+            <TextInput placeholder={t("searchPlaceholder")} value={search} onChange={setSearch} />
           </div>
           <div style={{ display: "flex", gap: 4 }}>
             {(["all", "mint", "broker"] as const).map((opt) => (
@@ -541,19 +541,19 @@ export default function Resources() {
                   transition: "all 0.15s",
                 }}
               >
-                {opt}
+                {t(`filter.${opt}`)}
               </button>
             ))}
           </div>
         </div>
-        <Btn onClick={openCreate}>+ New Resource</Btn>
+        <Btn onClick={openCreate}>{t("newResource")}</Btn>
       </div>
 
       <Card style={{ padding: 0 }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: sz.base }}>
           <thead>
             <tr>
-              {["Slug", "Display Name", "Backend", "URI", "Provider", "Scopes"].map((h) => (
+              {[t("slug"), t("displayName"), t("backend"), "URI", t("provider"), t("scopes")].map((h) => (
                 <th key={h} style={{ textAlign: "left", padding: "8px 12px", color: C.textDim, fontFamily: fonts.mono, fontSize: sz.xs, textTransform: "uppercase", letterSpacing: 1.2, borderBottom: `1px solid ${C.border}`, fontWeight: 400 }}>
                   {h}
                 </th>
@@ -579,15 +579,15 @@ export default function Resources() {
         {filtered.length === 0 && (
           <div style={{ padding: "20px 12px", fontSize: sz.base, color: C.textDim, textAlign: "center" }}>
             {resources.length === 0
-              ? "No resources registered. Create one to start minting or brokering tokens."
-              : "No resources match your search."}
+              ? t("empty")
+              : t("noMatches")}
           </div>
         )}
       </Card>
 
       {editing && (
         <Drawer
-          title={editing === "new" ? "New Resource" : "Edit Resource"}
+          title={editing === "new" ? t("newResourceTitle") : t("editResourceTitle")}
           subtitle={editing !== "new" ? editing.slug : undefined}
           onClose={closeEditor}
           width={560}
@@ -633,7 +633,7 @@ export default function Resources() {
                     letterSpacing: 1,
                   }}
                 >
-                  Fronting
+                  {t("fronting")}
                 </div>
                 <ResourceFrontingSection
                   slug={editing.slug}
@@ -653,22 +653,22 @@ export default function Resources() {
           <div style={{ marginTop: 20 }}>
             <InfoBox color={C.blue}>
               {editing === "new"
-                ? "Mint resources mint Authplane-issued JWTs. Broker resources vend an upstream credential held in the configured provider."
-                : "Only fields you touch are sent on save (PATCH). Untouched fields are left unchanged on the server — including the cross-client allowlist and runtime client list."}
+                ? t("createInfo")
+                : t("editInfo")}
             </InfoBox>
           </div>
 
           <div style={{ display: "flex", gap: 10, marginTop: 20, paddingTop: 16, borderTop: `1px solid ${C.border}`, justifyContent: "space-between" }}>
             <div style={{ display: "flex", gap: 10 }}>
-              <Btn secondary onClick={closeEditor}>Cancel</Btn>
+              <Btn secondary onClick={closeEditor}>{t("cancel")}</Btn>
               {editing === "new" ? (
-                <Btn onClick={handleCreate}>Create</Btn>
+                <Btn onClick={handleCreate}>{t("create")}</Btn>
               ) : (
-                <Btn onClick={() => handlePatch(editing)} disabled={dirty.size === 0}>Save Changes</Btn>
+                <Btn onClick={() => handlePatch(editing)} disabled={dirty.size === 0}>{t("saveChanges")}</Btn>
               )}
             </div>
             {editing !== "new" && (
-              <Btn danger small onClick={() => { setDelTarget(editing); closeEditor(); }}>Delete</Btn>
+              <Btn danger small onClick={() => { setDelTarget(editing); closeEditor(); }}>{t("delete")}</Btn>
             )}
           </div>
         </Drawer>
@@ -676,56 +676,56 @@ export default function Resources() {
 
       {pendingKindSwitch && (
         <Modal
-          title="Switch backend kind?"
+          title={t("switchKindTitle")}
           titleColor={C.warn}
           onClose={() => setPendingKindSwitch(null)}
         >
           <div style={{ fontSize: sz.base, color: C.textDim, lineHeight: 1.7, marginBottom: 14 }}>
-            Switching from <strong style={{ color: C.text }}>broker</strong> to <strong style={{ color: C.text }}>mint</strong>
-            {" "}will remove the upstream mapping from every existing scope. The scope names + descriptions are preserved; the upstream values are not.
+            {t("switchKindBefore")} <strong style={{ color: C.text }}>{t("backendValue.broker")}</strong> {t("to")} <strong style={{ color: C.text }}>{t("backendValue.mint")}</strong>
+            {" "}{t("switchKindAfter")}
           </div>
           <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-            <Btn secondary small onClick={() => setPendingKindSwitch(null)}>Cancel</Btn>
-            <Btn danger small onClick={() => applyKindSwitch(pendingKindSwitch)}>Switch and clear upstreams</Btn>
+            <Btn secondary small onClick={() => setPendingKindSwitch(null)}>{t("cancel")}</Btn>
+            <Btn danger small onClick={() => applyKindSwitch(pendingKindSwitch)}>{t("switchAndClear")}</Btn>
           </div>
         </Modal>
       )}
 
       {confirmingClearAllowlist && (
         <Modal
-          title="Clear cross-client allowlist?"
+          title={t("clearAllowlistTitle")}
           titleColor={C.danger}
           onClose={() => setConfirmingClearAllowlist(false)}
         >
           <div style={{ fontSize: sz.base, color: C.textDim, lineHeight: 1.7, marginBottom: 14 }}>
-            This will allow <strong style={{ color: C.danger }}>any</strong> client to act for this resource (user consent still applies, except for Mint self-exchange and fronted exchanges). Use this only when the resource intentionally has no per-client restriction.
+            {t("clearAllowlistBefore")} <strong style={{ color: C.danger }}>{t("any")}</strong> {t("clearAllowlistAfter")}
           </div>
           <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-            <Btn secondary small onClick={() => setConfirmingClearAllowlist(false)}>Cancel</Btn>
-            <Btn danger small onClick={clearAllowlist}>Clear allowlist</Btn>
+            <Btn secondary small onClick={() => setConfirmingClearAllowlist(false)}>{t("cancel")}</Btn>
+            <Btn danger small onClick={clearAllowlist}>{t("clearAllowlist")}</Btn>
           </div>
         </Modal>
       )}
 
       {delTarget && (
-        <Modal title={`Delete ${delTarget.slug}?`} onClose={() => { setDelTarget(null); setDelInput(""); }}>
+        <Modal title={t("deleteTitle", { slug: delTarget.slug })} onClose={() => { setDelTarget(null); setDelInput(""); }}>
           <div style={{ fontSize: sz.base, color: C.textDim, lineHeight: 1.7, marginBottom: 14 }}>
-            Removing <strong style={{ color: C.text }}>{delTarget.slug}</strong> will fail with 409 if any consent grants or live issuances still reference it — revoke them first. Fronting links pointing to or from this resource also block delete; you'll get a cascade-confirm modal listing them if so.
+            {t("deleteBefore")} <strong style={{ color: C.text }}>{delTarget.slug}</strong> {t("deleteAfter")}
           </div>
           <div style={{ fontSize: sz.sm, color: C.textDim, marginBottom: 6 }}>
-            Type <strong>{delTarget.slug}</strong> to confirm:
+            {t("typeToConfirmBefore")} <strong>{delTarget.slug}</strong> {t("typeToConfirmAfter")}
           </div>
           <TextInput value={delInput} onChange={setDelInput} placeholder={delTarget.slug} style={{ marginBottom: 14 }} />
           <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-            <Btn secondary small onClick={() => { setDelTarget(null); setDelInput(""); }}>Cancel</Btn>
-            <Btn danger small disabled={delInput !== delTarget.slug} onClick={handleDelete}>Delete</Btn>
+            <Btn secondary small onClick={() => { setDelTarget(null); setDelInput(""); }}>{t("cancel")}</Btn>
+            <Btn danger small disabled={delInput !== delTarget.slug} onClick={handleDelete}>{t("delete")}</Btn>
           </div>
         </Modal>
       )}
 
       {cascadeModal && (
         <Modal
-          title={`Cascade-delete ${cascadeModal.target.slug}?`}
+          title={t("cascadeDeleteTitle", { slug: cascadeModal.target.slug })}
           titleColor={C.danger}
           onClose={() => setCascadeModal(null)}
         >
@@ -740,12 +740,11 @@ export default function Resources() {
             <strong style={{ color: C.text }}>
               {cascadeModal.target.slug}
             </strong>{" "}
-            still has{" "}
+            {t("stillHas")}{" "}
             <strong style={{ color: C.danger }}>
-              {cascadeModal.dependents.length} fronting link
-              {cascadeModal.dependents.length === 1 ? "" : "s"}
+              {t("frontingLinks", { count: cascadeModal.dependents.length })}
             </strong>
-            . Deleting this resource will also remove these links atomically:
+            {t("cascadeDeleteAfter")}
           </div>
           <div
             style={{
@@ -768,12 +767,12 @@ export default function Resources() {
             ))}
             {cascadeModal.dependents.length > 10 && (
               <div style={{ fontStyle: "italic", marginTop: 4 }}>
-                …and {cascadeModal.dependents.length - 10} more
+                {t("andMore", { count: cascadeModal.dependents.length - 10 })}
               </div>
             )}
           </div>
           <div style={{ fontSize: sz.sm, color: C.textDim, marginBottom: 6 }}>
-            Type <strong>{cascadeModal.target.slug}</strong> to confirm:
+            {t("typeToConfirmBefore")} <strong>{cascadeModal.target.slug}</strong> {t("typeToConfirmAfter")}
           </div>
           <TextInput
             value={cascadeModal.confirmInput}
@@ -785,7 +784,7 @@ export default function Resources() {
           />
           <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
             <Btn secondary small onClick={() => setCascadeModal(null)}>
-              Cancel
+              {t("cancel")}
             </Btn>
             <Btn
               danger
@@ -795,7 +794,7 @@ export default function Resources() {
               }
               onClick={handleCascadeDelete}
             >
-              Delete with cascade
+              {t("deleteWithCascade")}
             </Btn>
           </div>
         </Modal>
@@ -834,12 +833,13 @@ function ResourceFormBody({
   onAddReturnUrl, onRemoveReturnUrl, onUpdateReturnUrl,
   formClientName, scopeCounts,
 }: FormBodyProps) {
+  const { t } = useTranslation("resources");
   const isBroker = form.backend_kind === "broker";
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
       <div>
-        <Label>Backend Kind *</Label>
+        <Label>{t("backendKindRequiredLabel")}</Label>
         <div style={{ display: "flex", gap: 6 }}>
           {(["mint", "broker"] as const).map((k) => (
             <button
@@ -857,51 +857,51 @@ function ResourceFormBody({
                 transition: "all 0.15s",
               }}
             >
-              {k}
+              {t(`backendValue.${k}`)}
             </button>
           ))}
         </div>
         <div style={{ fontSize: sz.sm, color: C.textDim, marginTop: 4 }}>
           {isBroker
-            ? "Authplane brokers an upstream credential held in the configured provider. Tokens vended are opaque upstream tokens."
-            : "Authplane mints audience-scoped JWTs for this resource. The resource's URI is the audience claim."}
+            ? t("brokerDescription")
+            : t("mintDescription")}
         </div>
       </div>
       <div>
-        <Label>Slug *</Label>
+        <Label>{t("slugRequiredLabel")}</Label>
         <TextInput
-          placeholder="e.g. tasks-mcp"
+          placeholder={t("slugExample")}
           value={form.slug}
           onChange={(v) => { setForm((f) => ({ ...f, slug: v })); markDirty("slug"); }}
         />
         {formErrors.slug && <div style={{ fontSize: sz.sm, color: C.danger, marginTop: 3 }}>{formErrors.slug}</div>}
       </div>
       <div>
-        <Label>Display Name *</Label>
+        <Label>{t("displayNameRequiredLabel")}</Label>
         <TextInput
-          placeholder="e.g. Tasks MCP"
+          placeholder={t("nameExample")}
           value={form.display_name}
           onChange={(v) => { setForm((f) => ({ ...f, display_name: v })); markDirty("display_name"); }}
         />
         {formErrors.display_name && <div style={{ fontSize: sz.sm, color: C.danger, marginTop: 3 }}>{formErrors.display_name}</div>}
       </div>
       <div>
-        <Label>URI *</Label>
+        <Label>{t("uriRequiredLabel")}</Label>
         <TextInput
-          placeholder={isBroker ? "e.g. https://api.github.com" : "e.g. https://tasks-mcp.example.com"}
+          placeholder={isBroker ? t("brokerUriExample") : t("mintUriExample")}
           value={form.uri}
           onChange={(v) => { setForm((f) => ({ ...f, uri: v })); markDirty("uri"); }}
         />
         {formErrors.uri && <div style={{ fontSize: sz.sm, color: C.danger, marginTop: 3 }}>{formErrors.uri}</div>}
         <div style={{ fontSize: sz.sm, color: C.textDim, marginTop: 4 }}>
           {isBroker
-            ? "Used as the upstream API base for diagnostics. The provider's adapter knows the actual endpoint URLs."
-            : "Used as the audience claim on minted tokens."}
+            ? t("brokerUriDescription")
+            : t("mintUriDescription")}
         </div>
       </div>
       {isBroker && (
         <div>
-          <Label>Provider *</Label>
+          <Label>{t("providerRequiredLabel")}</Label>
           <select
             value={form.broker_provider_id}
             onChange={(e) => { setForm((f) => ({ ...f, broker_provider_id: e.target.value })); markDirty("broker_provider_id"); }}
@@ -916,47 +916,47 @@ function ResourceFormBody({
               fontFamily: fonts.mono,
             }}
           >
-            <option value="">Select a provider…</option>
+            <option value="">{t("selectProvider")}</option>
             {providers.map((p) => (
-              <option key={p.id} value={p.id}>{p.slug} — {p.display_name} ({p.protocol})</option>
+              <option key={p.id} value={p.id}>{p.slug} — {p.display_name} ({t(`protocolValue.${p.protocol}`, { defaultValue: p.protocol })})</option>
             ))}
           </select>
           {formErrors.broker_provider_id && <div style={{ fontSize: sz.sm, color: C.danger, marginTop: 3 }}>{formErrors.broker_provider_id}</div>}
           <div style={{ fontSize: sz.sm, color: C.textDim, marginTop: 4 }}>
-            Provider must already exist. If you don't see one, create it from the Providers page first.
+            {t("providerHelp")}
           </div>
         </div>
       )}
       <div>
-        <Label>Scopes *</Label>
+        <Label>{t("scopesRequiredLabel")}</Label>
         <div style={{ fontSize: sz.sm, color: C.textDim, marginBottom: 8 }}>
           {isBroker
-            ? "Each scope must declare its upstream mapping — the upstream scope vended at exchange time."
-            : "Scope name + operator-facing description shown on the consent screen."}
+            ? t("brokerScopesHelp")
+            : t("mintScopesHelp")}
         </div>
         {form.scopes.map((row, i) => {
           const linksTouching = scopeCounts[row.name.trim()] ?? [];
           return (
             <div key={i} style={{ marginBottom: 8, display: "grid", gridTemplateColumns: isBroker ? "1fr 1fr 1fr auto 28px" : "1fr 2fr auto 28px", gap: 8, alignItems: "start" }}>
-              <TextInput placeholder="name (e.g. tasks:read)" value={row.name} onChange={(v) => onUpdateScope(i, "name", v)} />
+              <TextInput placeholder={t("scopeNamePlaceholder")} value={row.name} onChange={(v) => onUpdateScope(i, "name", v)} />
               {isBroker && (
-                <TextInput placeholder="upstream (e.g. read:tasks)" value={row.upstream} onChange={(v) => onUpdateScope(i, "upstream", v)} />
+                <TextInput placeholder={t("upstreamPlaceholder")} value={row.upstream} onChange={(v) => onUpdateScope(i, "upstream", v)} />
               )}
-              <TextInput placeholder="description" value={row.description} onChange={(v) => onUpdateScope(i, "description", v)} />
+              <TextInput placeholder={t("descriptionPlaceholder")} value={row.description} onChange={(v) => onUpdateScope(i, "description", v)} />
               <ScopeFrontingBadge scopeName={row.name.trim()} links={linksTouching} />
               <Btn danger small onClick={() => onRemoveScope(i)}>{"✕"}</Btn>
             </div>
           );
         })}
         <div style={{ display: "flex" }}>
-          <Btn secondary small full onClick={onAddScope}>+ Add Scope</Btn>
+          <Btn secondary small full onClick={onAddScope}>{t("addScope")}</Btn>
         </div>
         {formErrors.scopes && <div style={{ fontSize: sz.sm, color: C.danger, marginTop: 6 }}>{formErrors.scopes}</div>}
       </div>
       <div>
-        <Label>Cross-client allowlist (Exchange policy)</Label>
+        <Label>{t("allowlistLabel")}</Label>
         <div style={{ fontSize: sz.sm, color: C.textDim, marginBottom: 8 }}>
-          Clients allowed to act for this resource via token exchange. Empty = any client may act (user consent still applies, except for Mint self-exchange and fronted exchanges).
+          {t("allowlistHelp")}
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
           {form.allowed_client_ids.map((id) => (
@@ -973,14 +973,14 @@ function ResourceFormBody({
                 fontSize: sz.sm,
                 cursor: "pointer",
               }}
-              title="Click to remove"
+              title={t("clickToRemove")}
             >
               {formClientName(id)} <span style={{ color: C.textDim, marginLeft: 4 }}>{"✕"}</span>
             </span>
           ))}
           {form.allowed_client_ids.length === 0 && (
             <span style={{ fontSize: sz.sm, color: C.textDim, fontStyle: "italic" }}>
-              (none — any client may act)
+              {t("noAllowedClients")}
             </span>
           )}
         </div>
@@ -998,22 +998,19 @@ function ResourceFormBody({
             marginRight: 8,
           }}
         >
-          <option value="">+ Add client…</option>
+          <option value="">{t("addClient")}</option>
           {clients.filter((c) => !form.allowed_client_ids.includes(c.id)).map((c) => (
             <option key={c.id} value={c.id}>{c.name} ({c.id.substring(0, 8)}…)</option>
           ))}
         </select>
         {form.allowed_client_ids.length > 0 && (
-          <Btn danger small onClick={onAskClearAllowlist}>Clear allowlist</Btn>
+          <Btn danger small onClick={onAskClearAllowlist}>{t("clearAllowlist")}</Btn>
         )}
       </div>
       <div>
-        <Label>Runtime clients (act AS this resource)</Label>
+        <Label>{t("runtimeClientsLabel")}</Label>
         <div style={{ fontSize: sz.sm, color: C.textDim, marginBottom: 8 }}>
-          OAuth clients authorized to act AS this resource at <code>/oauth/token</code>
-          {" "}. Empty = default-deny: no client may act as this resource.
-          Multi-entry models multi-tier deployments (prod / canary / dev) where each
-          tier authenticates with its own credentials but maps to the same resource.
+          {t("runtimeClientsBefore")} <code>/oauth/token</code>{t("runtimeClientsAfter")}
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
           {form.runtime_client_ids.map((id) => (
@@ -1030,14 +1027,14 @@ function ResourceFormBody({
                 fontSize: sz.sm,
                 cursor: "pointer",
               }}
-              title="Click to remove"
+              title={t("clickToRemove")}
             >
               {formClientName(id)} <span style={{ color: C.textDim, marginLeft: 4 }}>{"✕"}</span>
             </span>
           ))}
           {form.runtime_client_ids.length === 0 && (
             <span style={{ fontSize: sz.sm, color: C.textDim, fontStyle: "italic" }}>
-              (none — default-deny; no client may act as this resource)
+              {t("noRuntimeClients")}
             </span>
           )}
         </div>
@@ -1055,7 +1052,7 @@ function ResourceFormBody({
             marginRight: 8,
           }}
         >
-          <option value="">+ Add client…</option>
+          <option value="">{t("addClient")}</option>
           {clients.filter((c) => !form.runtime_client_ids.includes(c.id)).map((c) => (
             <option key={c.id} value={c.id}>{c.name} ({c.id.substring(0, 8)}…)</option>
           ))}
@@ -1063,9 +1060,9 @@ function ResourceFormBody({
       </div>
       {isBroker && (
         <div>
-          <Label>Allowed return URLs (Connect policy)</Label>
+          <Label>{t("returnUrlsLabel")}</Label>
           <div style={{ fontSize: sz.sm, color: C.textDim, marginBottom: 8 }}>
-            URLs the connect flow may redirect to after upstream consent. Required for broker resources.
+            {t("returnUrlsHelp")}
           </div>
           {form.allowed_return_urls.map((url, i) => (
             <div key={i} style={{ marginBottom: 8, display: "flex", alignItems: "flex-start", gap: 8 }}>
@@ -1076,7 +1073,7 @@ function ResourceFormBody({
             </div>
           ))}
           <div style={{ display: "flex" }}>
-            <Btn secondary small full onClick={onAddReturnUrl}>+ Add Return URL</Btn>
+            <Btn secondary small full onClick={onAddReturnUrl}>{t("addReturnUrl")}</Btn>
           </div>
         </div>
       )}

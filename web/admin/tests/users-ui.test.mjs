@@ -29,5 +29,5 @@ for (const extension of [".ts", ".tsx"]) {
 test("users page offers an action to create a user", () => {
   const Users = require(resolve(projectDir, "src/pages/Users.tsx")).default;
   const html = renderToStaticMarkup(createElement(Users));
-  assert.match(html, /<button\b[^>]*>Create User<\/button>/);
+  assert.match(html, /<button\b[^>]*>创建用户<\/button>/);
 });

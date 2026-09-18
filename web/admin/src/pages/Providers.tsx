@@ -27,6 +27,7 @@ import Toast from "../components/Toast";
 import InfoBox from "../components/InfoBox";
 import SectionTitle from "../components/SectionTitle";
 import JsonView from "../components/JsonView";
+import { useTranslation } from "../i18n";
 
 const PROTOCOL_OPTIONS: Protocol[] = ["oauth", "api_key", "service_account"];
 
@@ -75,6 +76,7 @@ const formFromView = (p: BrokerProviderView): ProviderForm => ({
 type DirtyField = "slug" | "display_name" | "protocol" | "config_data";
 
 export default function Providers() {
+  const { t } = useTranslation("providers");
   const [providers, setProviders] = useState<BrokerProviderView[]>([]);
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
@@ -110,9 +112,9 @@ export default function Providers() {
       setProviders(ps);
       setError("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load providers");
+      setError(err instanceof Error ? err.message : t("loadFailed"));
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -151,20 +153,20 @@ export default function Providers() {
   };
 
   const parseConfig = (raw: string): { ok: true; value: unknown } | { ok: false; err: string } => {
-    if (raw.trim() === "") return { ok: false, err: "Config is required" };
+    if (raw.trim() === "") return { ok: false, err: t("configRequired") };
     try {
       return { ok: true, value: JSON.parse(raw) };
     } catch (e) {
-      return { ok: false, err: e instanceof Error ? e.message : "Invalid JSON" };
+      return { ok: false, err: e instanceof Error ? e.message : t("invalidJson") };
     }
   };
 
   const validate = (): { ok: false } | { ok: true; config: unknown } => {
     const e: Record<string, string> = {};
-    if (!form.slug.trim()) e.slug = "Slug is required";
-    if (!form.display_name.trim()) e.display_name = "Display name is required";
+    if (!form.slug.trim()) e.slug = t("slugRequired");
+    if (!form.display_name.trim()) e.display_name = t("nameRequired");
     const parsed = parseConfig(form.config_text);
-    if (!parsed.ok) e.config_data = `JSON parse error: ${parsed.err}`;
+    if (!parsed.ok) e.config_data = t("jsonParseError", { error: parsed.err });
     setFormErrors(e);
     if (Object.keys(e).length > 0) return { ok: false };
     return { ok: true, config: (parsed as { ok: true; value: unknown }).value };
@@ -181,11 +183,11 @@ export default function Providers() {
     };
     try {
       await createBrokerProvider(req);
-      showToast(`Provider "${req.slug}" created`);
+      showToast(t("created", { slug: req.slug }));
       closeEditor();
       load();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to create provider", "error");
+      showToast(err instanceof Error ? err.message : t("createFailed"), "error");
     }
   };
 
@@ -202,16 +204,16 @@ export default function Providers() {
       patch.config_data = v.config;
     }
     if (Object.keys(patch).length === 0) {
-      showToast("No changes to save");
+      showToast(t("noChanges"));
       return;
     }
     try {
       await patchBrokerProvider(target.id, patch);
-      showToast("Provider updated");
+      showToast(t("updated"));
       closeEditor();
       load();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to update", "error");
+      showToast(err instanceof Error ? err.message : t("updateFailed"), "error");
     }
   };
 
@@ -219,13 +221,13 @@ export default function Providers() {
     if (!delTarget) return;
     try {
       await deleteBrokerProvider(delTarget.id);
-      showToast("Provider deleted");
+      showToast(t("deleted"));
       setDelTarget(null);
       setDelInput("");
       load();
     } catch (err) {
       // 409 if a Resource still references this provider — surface verbatim.
-      showToast(err instanceof Error ? err.message : "Failed to delete", "error");
+      showToast(err instanceof Error ? err.message : t("deleteFailed"), "error");
     }
   };
 
@@ -238,9 +240,9 @@ export default function Providers() {
   return (
     <div style={{ padding: 28 }}>
       <div style={{ marginBottom: 20 }}>
-        <div style={{ fontFamily: fonts.mono, fontSize: sz.xl, fontWeight: 600 }}>Providers</div>
+        <div style={{ fontFamily: fonts.mono, fontSize: sz.xl, fontWeight: 600 }}>{t("title")}</div>
         <div style={{ fontSize: sz.base, color: C.textDim, marginTop: 2 }}>
-          Upstream configuration for Broker resources — OAuth client IDs, API base URLs, secret env-var bindings.
+          {t("subtitle")}
         </div>
       </div>
 
@@ -252,16 +254,16 @@ export default function Providers() {
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, gap: 10 }}>
         <div style={{ width: 280 }}>
-          <TextInput placeholder="Search by slug, name, or protocol…" value={search} onChange={setSearch} />
+          <TextInput placeholder={t("searchPlaceholder")} value={search} onChange={setSearch} />
         </div>
-        <Btn onClick={openCreate}>+ New Provider</Btn>
+        <Btn onClick={openCreate}>{t("newProvider")}</Btn>
       </div>
 
       <Card style={{ padding: 0 }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: sz.base }}>
           <thead>
             <tr>
-              {["Slug", "Display Name", "Protocol", "Updated"].map((h) => (
+              {[t("slug"), t("displayName"), t("protocol"), t("updatedColumn")].map((h) => (
                 <th key={h} style={{ textAlign: "left", padding: "8px 12px", color: C.textDim, fontFamily: fonts.mono, fontSize: sz.xs, textTransform: "uppercase", letterSpacing: 1.2, borderBottom: `1px solid ${C.border}`, fontWeight: 400 }}>
                   {h}
                 </th>
@@ -279,7 +281,7 @@ export default function Providers() {
               >
                 <td style={{ padding: "10px 12px", fontWeight: 500 }}>{p.slug}</td>
                 <td style={{ padding: "10px 12px" }}>{p.display_name || <span style={{ color: C.textDim }}>{"—"}</span>}</td>
-                <td style={{ padding: "10px 12px" }}><Tag color={protocolColor(p.protocol)}>{p.protocol}</Tag></td>
+                <td style={{ padding: "10px 12px" }}><Tag color={protocolColor(p.protocol)}>{t(`protocolValue.${p.protocol}`, { defaultValue: p.protocol })}</Tag></td>
                 <td style={{ padding: "10px 12px", color: C.textDim, fontSize: sz.sm }}>
                   {new Date(p.updated_at).toLocaleDateString()}
                 </td>
@@ -290,40 +292,40 @@ export default function Providers() {
         {filtered.length === 0 && (
           <div style={{ padding: "20px 12px", fontSize: sz.base, color: C.textDim, textAlign: "center" }}>
             {providers.length === 0
-              ? "No providers configured. Create one to support Broker resources."
-              : "No providers match your search."}
+              ? t("empty")
+              : t("noMatches")}
           </div>
         )}
       </Card>
 
       {editing && (
         <Drawer
-          title={editing === "new" ? "New Provider" : "Edit Provider"}
+          title={editing === "new" ? t("newProviderTitle") : t("editProviderTitle")}
           subtitle={editing !== "new" ? editing.slug : undefined}
           onClose={closeEditor}
           width={560}
         >
           <div style={{ display: "grid", gap: 16 }}>
             <div>
-              <Label>Slug *</Label>
+              <Label>{t("slugRequiredLabel")}</Label>
               <TextInput
-                placeholder="e.g. github"
+                placeholder={t("slugExample")}
                 value={form.slug}
                 onChange={(v) => { setForm((f) => ({ ...f, slug: v })); markDirty("slug"); }}
               />
               {formErrors.slug && <div style={{ fontSize: sz.sm, color: C.danger, marginTop: 3 }}>{formErrors.slug}</div>}
             </div>
             <div>
-              <Label>Display Name *</Label>
+              <Label>{t("displayNameRequiredLabel")}</Label>
               <TextInput
-                placeholder="e.g. GitHub"
+                placeholder={t("nameExample")}
                 value={form.display_name}
                 onChange={(v) => { setForm((f) => ({ ...f, display_name: v })); markDirty("display_name"); }}
               />
               {formErrors.display_name && <div style={{ fontSize: sz.sm, color: C.danger, marginTop: 3 }}>{formErrors.display_name}</div>}
             </div>
             <div>
-              <Label>Protocol *</Label>
+              <Label>{t("protocolRequiredLabel")}</Label>
               <div style={{ display: "flex", gap: 6 }}>
                 {PROTOCOL_OPTIONS.map((p) => (
                   <button
@@ -341,15 +343,15 @@ export default function Providers() {
                       transition: "all 0.15s",
                     }}
                   >
-                    {p}
+                    {t(`protocolValue.${p}`, { defaultValue: p })}
                   </button>
                 ))}
               </div>
             </div>
             <div>
-              <Label>Config Data *</Label>
+              <Label>{t("configDataRequiredLabel")}</Label>
               <div style={{ fontSize: sz.sm, color: C.textDim, marginBottom: 6 }}>
-                Adapter-shaped JSON. The shape varies by protocol; see the sample for a working starting point.
+                {t("configDescription")}
               </div>
               <TextInput
                 rows={12}
@@ -372,17 +374,17 @@ export default function Providers() {
                     textDecoration: "underline",
                   }}
                 >
-                  See sample for {form.protocol}
+                  {t("seeSample", { protocol: t(`protocolValue.${form.protocol}`, { defaultValue: form.protocol }) })}
                 </button>
               </div>
             </div>
             {editing !== "new" && (
               <>
                 <div style={{ marginTop: 6 }}>
-                  <SectionTitle>Metadata</SectionTitle>
+                  <SectionTitle>{t("metadata")}</SectionTitle>
                   <DrawerRow label="provider_id" value={<Mono style={{ fontSize: sz.sm }}>{editing.id}</Mono>} />
-                  <DrawerRow label="created" value={new Date(editing.created_at).toLocaleString()} />
-                  <DrawerRow label="updated" value={new Date(editing.updated_at).toLocaleString()} />
+                  <DrawerRow label={t("createdColumn")} value={new Date(editing.created_at).toLocaleString()} />
+                  <DrawerRow label={t("updatedColumn")} value={new Date(editing.updated_at).toLocaleString()} />
                 </div>
               </>
             )}
@@ -390,22 +392,21 @@ export default function Providers() {
 
           <div style={{ marginTop: 20 }}>
             <InfoBox color={C.blue}>
-              Secrets are NOT stored in <Mono>config_data</Mono>. Reference an environment variable (e.g.{" "}
-              <Mono>client_secret_ref</Mono>) and set the value at the deployment level.
+              {t("secretsBefore")} <Mono>config_data</Mono>{t("secretsMiddle")} <Mono>client_secret_ref</Mono>{t("secretsAfter")}
             </InfoBox>
           </div>
 
           <div style={{ display: "flex", gap: 10, marginTop: 20, paddingTop: 16, borderTop: `1px solid ${C.border}`, justifyContent: "space-between" }}>
             <div style={{ display: "flex", gap: 10 }}>
-              <Btn secondary onClick={closeEditor}>Cancel</Btn>
+              <Btn secondary onClick={closeEditor}>{t("cancel")}</Btn>
               {editing === "new" ? (
-                <Btn onClick={handleCreate}>Create</Btn>
+                <Btn onClick={handleCreate}>{t("create")}</Btn>
               ) : (
-                <Btn onClick={() => handlePatch(editing)} disabled={dirty.size === 0}>Save Changes</Btn>
+                <Btn onClick={() => handlePatch(editing)} disabled={dirty.size === 0}>{t("saveChanges")}</Btn>
               )}
             </div>
             {editing !== "new" && (
-              <Btn danger small onClick={() => { setDelTarget(editing); closeEditor(); }}>Delete</Btn>
+              <Btn danger small onClick={() => { setDelTarget(editing); closeEditor(); }}>{t("delete")}</Btn>
             )}
           </div>
         </Drawer>
@@ -413,39 +414,38 @@ export default function Providers() {
 
       {showSample && (
         <Modal
-          title={`Sample config_data — ${showSample}`}
+          title={t("sampleTitle", { protocol: showSample })}
           titleColor={C.blue}
           width={560}
           onClose={() => setShowSample(null)}
         >
           <div style={{ fontSize: sz.sm, color: C.textDim, lineHeight: 1.7, marginBottom: 10 }}>
-            Copy this into the Config Data field, then adjust for your provider. The shape is what the server-side adapter expects;
-            the UI does not validate beyond JSON well-formedness.
+            {t("sampleDescription")}
           </div>
           <JsonView value={PROTOCOL_SAMPLES[showSample]} />
           <div style={{ display: "flex", gap: 10, marginTop: 14, justifyContent: "flex-end" }}>
-            <Btn secondary small onClick={() => setShowSample(null)}>Close</Btn>
+            <Btn secondary small onClick={() => setShowSample(null)}>{t("close")}</Btn>
             <Btn small onClick={() => {
               setForm((f) => ({ ...f, config_text: JSON.stringify(PROTOCOL_SAMPLES[showSample], null, 2) }));
               markDirty("config_data");
               setShowSample(null);
-            }}>Use this sample</Btn>
+            }}>{t("useSample")}</Btn>
           </div>
         </Modal>
       )}
 
       {delTarget && (
-        <Modal title={`Delete ${delTarget.slug}?`} onClose={() => { setDelTarget(null); setDelInput(""); }}>
+        <Modal title={t("deleteTitle", { slug: delTarget.slug })} onClose={() => { setDelTarget(null); setDelInput(""); }}>
           <div style={{ fontSize: sz.base, color: C.textDim, lineHeight: 1.7, marginBottom: 14 }}>
-            Removing <strong style={{ color: C.text }}>{delTarget.slug}</strong> will fail with 409 if any Resource still references it. Reassign or delete those resources first if so.
+            {t("deleteBefore")} <strong style={{ color: C.text }}>{delTarget.slug}</strong> {t("deleteAfter")}
           </div>
           <div style={{ fontSize: sz.sm, color: C.textDim, marginBottom: 6 }}>
-            Type <strong>{delTarget.slug}</strong> to confirm:
+            {t("typeToConfirmBefore")} <strong>{delTarget.slug}</strong> {t("typeToConfirmAfter")}
           </div>
           <TextInput value={delInput} onChange={setDelInput} placeholder={delTarget.slug} style={{ marginBottom: 14 }} />
           <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-            <Btn secondary small onClick={() => { setDelTarget(null); setDelInput(""); }}>Cancel</Btn>
-            <Btn danger small disabled={delInput !== delTarget.slug} onClick={handleDelete}>Delete</Btn>
+            <Btn secondary small onClick={() => { setDelTarget(null); setDelInput(""); }}>{t("cancel")}</Btn>
+            <Btn danger small disabled={delInput !== delTarget.slug} onClick={handleDelete}>{t("delete")}</Btn>
           </div>
         </Modal>
       )}

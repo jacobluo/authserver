@@ -10,6 +10,7 @@ import Tag from "../components/Tag";
 import Mono from "../components/Mono";
 import Table from "../components/Table";
 import InfoBox from "../components/InfoBox";
+import { useTranslation } from "../i18n";
 
 // Event color mapping for audit events
 function eventColor(event: string): string {
@@ -22,18 +23,19 @@ function eventColor(event: string): string {
   return C.textDim;
 }
 
-function formatRelativeTime(isoDate: string): string {
+function formatRelativeTime(isoDate: string, t: ReturnType<typeof useTranslation>["t"]): string {
   const diff = Date.now() - new Date(isoDate).getTime();
   const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 1) return t("justNow");
+  if (mins < 60) return t("minutesAgo", { minutes: mins });
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
+  if (hrs < 24) return t("hoursAgo", { hours: hrs });
   const days = Math.floor(hrs / 24);
-  return `${days}d ago`;
+  return t("daysAgo", { days });
 }
 
 export default function Overview() {
+  const { t } = useTranslation("overview");
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [status, setStatus] = useState<SystemStatusResponse | null>(null);
   const [config, setConfig] = useState<SystemConfigResponse | null>(null);
@@ -54,9 +56,9 @@ export default function Overview() {
       setAudit(a);
       setError("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load data");
+      setError(err instanceof Error ? err.message : t("loadFailed"));
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     loadData();
@@ -67,15 +69,15 @@ export default function Overview() {
   return (
     <div style={{ padding: 28 }}>
       <div style={{ fontFamily: fonts.mono, fontSize: sz.xl, fontWeight: 600, marginBottom: 4 }}>
-        Overview
+        {t("title")}
       </div>
       <div style={{ fontSize: sz.base, color: C.textDim, marginBottom: 24 }}>
-        {status ? `v${status.version} · up ${status.uptime} · 30s refresh` : "Loading…"}
+        {status ? t("statusSummary", { version: status.version, uptime: status.uptime }) : t("loading")}
       </div>
 
       {error && (
         <InfoBox color={C.danger}>
-          <strong style={{ color: C.danger }}>Error:</strong> {error}
+          <strong style={{ color: C.danger }}>{t("errorLabel")}</strong> {error}
         </InfoBox>
       )}
 
@@ -86,7 +88,7 @@ export default function Overview() {
           stat, file as a follow-up admin-stats extension PR. */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 20 }}>
         <Card>
-          <Label>Signing Key</Label>
+          <Label>{t("signingKey")}</Label>
           <div style={{ fontFamily: fonts.mono, fontSize: sz.xl, color: C.accent, marginBottom: 4 }}>
             {config?.signing.algorithm || "—"}
           </div>
@@ -95,24 +97,24 @@ export default function Overview() {
           </div>
         </Card>
         <Card>
-          <Label>Encryption</Label>
+          <Label>{t("encryption")}</Label>
           <div style={{ fontFamily: fonts.mono, fontSize: sz.base, color: C.text, marginBottom: 4 }}>
             {config?.encryption.driver || "—"}
           </div>
           <div style={{ fontSize: sz.base }}>
             <StatusDot status={status?.subsystems.find(s => s.name === "encryption")?.status || "unknown"} />
-            {status?.subsystems.find(s => s.name === "encryption")?.status || "unknown"}
+            {t(status?.subsystems.find(s => s.name === "encryption")?.status || "unknown")}
           </div>
         </Card>
         <Card>
-          <Label>Token Exchange</Label>
+          <Label>{t("tokenExchange")}</Label>
           <div style={{ fontFamily: fonts.mono, fontSize: sz.xl, color: C.text, marginBottom: 4 }}>
-            {config?.token_exchange.enabled ? "enabled" : "disabled"}
+            {config?.token_exchange.enabled ? t("enabled") : t("disabled")}
           </div>
           <div style={{ fontSize: sz.base, color: C.textDim }}>
             {config?.token_exchange.enabled
-              ? `max chain depth ${config.token_exchange.max_chain_depth}`
-              : "configure token_exchange to enable"}
+              ? t("maxChainDepth", { depth: config.token_exchange.max_chain_depth })
+              : t("configureTokenExchange")}
           </div>
         </Card>
       </div>
@@ -124,10 +126,10 @@ export default function Overview() {
           background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, flexWrap: "wrap",
         }}>
           {[
-            ["Clients", stats.clients],
-            ["Users", stats.users],
-            ["Tokens (24h)", stats.active_tokens_24h],
-            ["Revoked", stats.revoked_tokens],
+            [t("clients"), stats.clients],
+            [t("users"), stats.users],
+            [t("tokens24h"), stats.active_tokens_24h],
+            [t("revoked"), stats.revoked_tokens],
           ].map(([label, value]) => (
             <div key={label as string}>
               <div style={{ fontFamily: fonts.mono, fontSize: sz.xs, color: C.textDim, textTransform: "uppercase", letterSpacing: 1, marginBottom: 3 }}>
@@ -147,18 +149,18 @@ export default function Overview() {
           {config.dpop.enabled && (
             <div style={{ background: alpha(C.blue, 0x10), border: `1px solid ${alpha(C.blue, 0x30)}`, borderRadius: 6, padding: "10px 16px", fontSize: sz.base, color: C.textDim }}>
               <span style={{ color: C.blue, fontFamily: fonts.mono, fontSize: sz.xs, textTransform: "uppercase", letterSpacing: 1, marginRight: 8 }}>
-                Info
+                {t("info")}
               </span>
-              DPoP enabled · nonce TTL {config.dpop.nonce_ttl || "default"}
-              {config.agents.enabled && ` · agents enabled`}
+              {t("dpopEnabled", { ttl: config.dpop.nonce_ttl || t("default") })}
+              {config.agents.enabled && t("agentsEnabled")}
             </div>
           )}
           {config.token_exchange.enabled && (
             <div style={{ background: alpha(C.purple, 0x10), border: `1px solid ${alpha(C.purple, 0x30)}`, borderRadius: 6, padding: "10px 16px", fontSize: sz.base, color: C.textDim }}>
               <span style={{ color: C.purple, fontFamily: fonts.mono, fontSize: sz.xs, textTransform: "uppercase", letterSpacing: 1, marginRight: 8 }}>
-                Info
+                {t("info")}
               </span>
-              Token exchange enabled · max chain depth {config.token_exchange.max_chain_depth}
+              {t("tokenExchangeEnabled", { depth: config.token_exchange.max_chain_depth })}
             </div>
           )}
         </div>
@@ -166,14 +168,14 @@ export default function Overview() {
 
       {/* Recent audit events */}
       <Card>
-        <SectionTitle>Recent Audit Events</SectionTitle>
+        <SectionTitle>{t("recentAuditEvents")}</SectionTitle>
         {audit.length === 0 ? (
-          <div style={{ fontSize: sz.base, color: C.textDim, padding: "12px 0" }}>No recent events.</div>
+          <div style={{ fontSize: sz.base, color: C.textDim, padding: "12px 0" }}>{t("noRecentEvents")}</div>
         ) : (
           <Table
-            headers={["Time", "Event", "Actor", "Detail"]}
+            headers={[t("time"), t("event"), t("actor"), t("detail")]}
             rows={audit.map((e) => [
-              <Mono>{formatRelativeTime(e.created_at)}</Mono>,
+              <Mono>{formatRelativeTime(e.created_at, t)}</Mono>,
               <Tag color={eventColor(e.action)}>{e.action}</Tag>,
               <Mono>{e.actor_id || "—"}</Mono>,
               <span style={{ fontSize: sz.base, color: C.textDim }}>{e.detail || "—"}</span>,

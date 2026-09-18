@@ -1,0 +1,18 @@
+{
+  "subtitle": "admin console",
+  "accountLogin": "Account Login",
+  "useApiKey": "Use API Key",
+  "email": "Email",
+  "emailPlaceholder": "admin@example.com",
+  "password": "Password",
+  "passwordPlaceholder": "Enter password",
+  "apiKey": "API Key",
+  "apiKeyPlaceholder": "Enter admin API key",
+  "signingIn": "Signing in…",
+  "signIn": "Sign In",
+  "accountHint": "Sign in with an administrator account.",
+  "apiKeyHint": "Use the API key from your server configuration.",
+  "invalidApiKey": "Invalid API key",
+  "invalidCredentials": "Invalid email, password, or server unreachable",
+  "invalidApiKeyOrServer": "Invalid API key or server unreachable"
+}

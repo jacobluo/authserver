@@ -15,6 +15,7 @@ import Toast from "../components/Toast";
 import Modal from "../components/Modal";
 import Label from "../components/Label";
 import Toggle from "../components/Toggle";
+import { useTranslation } from "../i18n";
 
 function truncate(id: string): string {
   return id.length > 8 ? id.substring(0, 8) + "…" : id;
@@ -32,10 +33,10 @@ function typeColor(t: string): string {
   return C.textDim;
 }
 
-function formatDate(iso: string): string {
+function formatDate(iso: string, locale: string): string {
   if (!iso) return "\u2014";
   const d = new Date(iso);
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return d.toLocaleDateString(locale, { month: "short", day: "numeric", year: "numeric" });
 }
 
 const GRANT_TYPE_OPTIONS = [
@@ -45,9 +46,9 @@ const GRANT_TYPE_OPTIONS = [
 ];
 
 const AUTH_METHOD_OPTIONS = [
-  { value: "client_secret_post", label: "client_secret_post (confidential)" },
-  { value: "client_secret_basic", label: "client_secret_basic (confidential)" },
-  { value: "none", label: "none (public client)" },
+  { value: "client_secret_post", label: "clientSecretPost" },
+  { value: "client_secret_basic", label: "clientSecretBasic" },
+  { value: "none", label: "nonePublic" },
 ];
 
 interface ClientFormData {
@@ -78,6 +79,7 @@ interface EditClientFormData {
 }
 
 export default function Clients() {
+  const { t, i18n } = useTranslation("clients");
   const [clients, setClients] = useState<ClientView[]>([]);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -118,9 +120,9 @@ export default function Clients() {
       setClients(data);
       setError("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load clients");
+      setError(err instanceof Error ? err.message : t("loadFailed"));
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     loadClients();
@@ -139,33 +141,33 @@ export default function Clients() {
   const handleSuspend = async (id: string) => {
     try {
       await suspendClient(id);
-      showToast("Client suspended");
+      showToast(t("clientSuspended"));
       setSelected(null);
       loadClients();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed");
+      showToast(err instanceof Error ? err.message : t("failed"));
     }
   };
 
   const handleRevoke = async (id: string) => {
     try {
       await revokeClient(id);
-      showToast("Client tokens revoked");
+      showToast(t("tokensRevoked"));
       setSelected(null);
       loadClients();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed");
+      showToast(err instanceof Error ? err.message : t("failed"));
     }
   };
 
   const handleReactivate = async (id: string) => {
     try {
       await reactivateClient(id);
-      showToast("Client reactivated");
+      showToast(t("clientReactivated"));
       setSelected(null);
       loadClients();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed");
+      showToast(err instanceof Error ? err.message : t("failed"));
     }
   };
 
@@ -187,14 +189,14 @@ export default function Clients() {
 
   const validateForm = (): boolean => {
     const e: Record<string, string> = {};
-    if (!form.name.trim()) e.name = "Client name is required";
-    if (form.grant_types.length === 0) e.grant_types = "Select at least one grant type";
-    if (!form.token_endpoint_auth_method) e.auth_method = "Select an auth method";
-    if (form.is_agent && !form.agent_description.trim()) e.agent_description = "Agent description is required when agent is enabled";
+    if (!form.name.trim()) e.name = t("nameRequired");
+    if (form.grant_types.length === 0) e.grant_types = t("grantTypeRequired");
+    if (!form.token_endpoint_auth_method) e.auth_method = t("authMethodRequired");
+    if (form.is_agent && !form.agent_description.trim()) e.agent_description = t("agentDescriptionRequired");
     // Redirect URIs are required for authorization_code grant
     if (form.grant_types.includes("authorization_code")) {
       const uris = form.redirect_uris.split(",").map((s) => s.trim()).filter(Boolean);
-      if (uris.length === 0) e.redirect_uris = "At least one redirect URI is required for authorization_code grant";
+      if (uris.length === 0) e.redirect_uris = t("redirectUriRequired");
     }
     setFormErrors(e);
     return Object.keys(e).length === 0;
@@ -223,7 +225,7 @@ export default function Clients() {
       setSecretCopied(false);
       loadClients();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to create client");
+      showToast(err instanceof Error ? err.message : t("createFailed"));
     } finally {
       setCreating(false);
     }
@@ -237,13 +239,13 @@ export default function Clients() {
       setTimeout(() => setSecretCopied(false), 2000);
     } catch {
       // Fallback: select the text for manual copy
-      showToast("Copy failed — please select and copy manually");
+      showToast(t("copyFailed"));
     }
   };
 
   const handleDismissSecret = () => {
     setCreatedResult(null);
-    showToast("Client created successfully");
+    showToast(t("clientCreatedSuccess"));
   };
 
   const handleRotateSecret = async (id: string) => {
@@ -254,7 +256,7 @@ export default function Clients() {
       setRotatedSecretCopied(false);
       setSelected(null);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to rotate secret");
+      showToast(err instanceof Error ? err.message : t("rotateFailed"));
     } finally {
       setRotating(false);
     }
@@ -267,13 +269,13 @@ export default function Clients() {
       setRotatedSecretCopied(true);
       setTimeout(() => setRotatedSecretCopied(false), 2000);
     } catch {
-      showToast("Copy failed — please select and copy manually");
+      showToast(t("copyFailed"));
     }
   };
 
   const handleDismissRotatedSecret = () => {
     setRotatedResult(null);
-    showToast("Client secret rotated successfully");
+    showToast(t("secretRotatedSuccess"));
   };
 
   const openEditForm = (client: ClientView) => {
@@ -301,11 +303,11 @@ export default function Clients() {
 
   const validateEditForm = (): boolean => {
     const e: Record<string, string> = {};
-    if (!editForm.name.trim()) e.name = "Client name is required";
-    if (editForm.grant_types.length === 0) e.grant_types = "Select at least one grant type";
+    if (!editForm.name.trim()) e.name = t("nameRequired");
+    if (editForm.grant_types.length === 0) e.grant_types = t("grantTypeRequired");
     if (editForm.grant_types.includes("authorization_code")) {
       const uris = editForm.redirect_uris.split(",").map((s) => s.trim()).filter(Boolean);
-      if (uris.length === 0) e.redirect_uris = "At least one redirect URI is required for authorization_code grant";
+      if (uris.length === 0) e.redirect_uris = t("redirectUriRequired");
     }
     setEditFormErrors(e);
     return Object.keys(e).length === 0;
@@ -334,17 +336,17 @@ export default function Clients() {
       }
       // Only call API if there are actual changes
       if (Object.keys(req).length === 0) {
-        showToast("No changes to save");
+        showToast(t("noChanges"));
         setShowEdit(false);
         return;
       }
       await updateClient(editTarget.id, req);
       setShowEdit(false);
       setEditTarget(null);
-      showToast("Client updated successfully");
+      showToast(t("clientUpdatedSuccess"));
       loadClients();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to update client");
+      showToast(err instanceof Error ? err.message : t("updateFailed"));
     } finally {
       setSaving(false);
     }
@@ -354,12 +356,12 @@ export default function Clients() {
     <div style={{ padding: 28 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
         <div>
-          <div style={{ fontSize: sz.xl, fontWeight: 600, fontFamily: fonts.mono }}>Clients</div>
+          <div style={{ fontSize: sz.xl, fontWeight: 600, fontFamily: fonts.mono }}>{t("title")}</div>
           <div style={{ fontSize: sz.base, color: C.textDim, marginTop: 2 }}>
-            {clients.length} registered OAuth clients
+            {t("registeredClients", { total: clients.length })}
           </div>
         </div>
-        <Btn onClick={openCreateForm}>+ Create Client</Btn>
+        <Btn onClick={openCreateForm}>{t("createClientButton")}</Btn>
       </div>
 
       {error && (
@@ -369,25 +371,25 @@ export default function Clients() {
       )}
 
       <div style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
-        <TextInput placeholder="Search by name or ID…" value={search} onChange={setSearch} style={{ width: 260 }} />
+        <TextInput placeholder={t("searchPlaceholder")} value={search} onChange={setSearch} style={{ width: 260 }} />
         <div style={{ display: "flex", gap: 4 }}>
-          {["all", "public", "confidential", "agent"].map((t) => (
+          {["all", "public", "confidential", "agent"].map((filterType) => (
             <button
-              key={t}
-              onClick={() => setTypeFilter(t)}
+              key={filterType}
+              onClick={() => setTypeFilter(filterType)}
               style={{
                 padding: "5px 12px",
                 borderRadius: 5,
-                border: `1px solid ${typeFilter === t ? alpha(t === "agent" ? C.purple : C.accent, 0x50) : C.border2}`,
-                background: typeFilter === t ? alpha(t === "agent" ? C.purple : C.accent, 0x18) : "transparent",
-                color: typeFilter === t ? (t === "agent" ? C.purple : C.accent) : C.textDim,
+                border: `1px solid ${typeFilter === filterType ? alpha(filterType === "agent" ? C.purple : C.accent, 0x50) : C.border2}`,
+                background: typeFilter === filterType ? alpha(filterType === "agent" ? C.purple : C.accent, 0x18) : "transparent",
+                color: typeFilter === filterType ? (filterType === "agent" ? C.purple : C.accent) : C.textDim,
                 cursor: "pointer",
                 fontFamily: fonts.mono,
                 fontSize: sz.sm,
                 textTransform: "uppercase",
               }}
             >
-              {t}
+              {filterType === "all" ? t("all") : t(`typeValue.${filterType}`)}
             </button>
           ))}
         </div>
@@ -397,7 +399,7 @@ export default function Clients() {
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: sz.base }}>
           <thead>
             <tr>
-              {["ID", "Name", "Type", "Grant Types", "Status", "Updated"].map((h) => (
+              {[t("id"), t("name"), t("type"), t("grantTypes"), t("status"), t("updated")].map((h) => (
                 <th key={h} style={{ textAlign: "left", padding: "8px 12px", color: C.textDim, fontFamily: fonts.mono, fontSize: sz.xs, textTransform: "uppercase", letterSpacing: 1.2, borderBottom: `1px solid ${C.border}`, fontWeight: 400 }}>
                   {h}
                 </th>
@@ -419,13 +421,13 @@ export default function Clients() {
                   <td style={{ padding: "10px 12px" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <span style={{ fontWeight: 500 }}>{c.name}</span>
-                      {type === "agent" && <Tag color={C.purple}>agent</Tag>}
+                      {type === "agent" && <Tag color={C.purple}>{t("agent")}</Tag>}
                     </div>
                   </td>
-                  <td style={{ padding: "10px 12px" }}><Tag color={typeColor(type)}>{type}</Tag></td>
+                  <td style={{ padding: "10px 12px" }}><Tag color={typeColor(type)}>{t(`typeValue.${type}`)}</Tag></td>
                   <td style={{ padding: "10px 12px" }}><Mono style={{ fontSize: sz.sm }}>{c.grant_types.join(", ")}</Mono></td>
-                  <td style={{ padding: "10px 12px" }}><StatusDot status={c.status} /><span style={{ fontSize: sz.base, color: C.textDim }}>{c.status}</span></td>
-                  <td style={{ padding: "10px 12px" }}><span style={{ fontSize: sz.base, color: C.textDim }}>{formatDate(c.updated_at)}</span></td>
+                  <td style={{ padding: "10px 12px" }}><StatusDot status={c.status} /><span style={{ fontSize: sz.base, color: C.textDim }}>{t(`statusValue.${c.status}`, { defaultValue: c.status })}</span></td>
+                  <td style={{ padding: "10px 12px" }}><span style={{ fontSize: sz.base, color: C.textDim }}>{formatDate(c.updated_at, i18n.language)}</span></td>
                 </tr>
               );
             })}
@@ -433,54 +435,54 @@ export default function Clients() {
         </table>
         {filtered.length === 0 && (
           <div style={{ padding: "20px 12px", fontSize: sz.base, color: C.textDim, textAlign: "center" }}>
-            {clients.length === 0 ? "No clients registered." : "No clients match your filters."}
+            {clients.length === 0 ? t("noClients") : t("noFilterResults")}
           </div>
         )}
       </Card>
 
       {/* Client Detail Drawer */}
       {selected && (
-        <Drawer title="Client Detail" subtitle={selected.name} onClose={() => setSelected(null)} width={500}>
-          <DrawerRow label="client_id" value={<Mono style={{ fontSize: sz.sm }}>{selected.id}</Mono>} />
-          <DrawerRow label="name" value={selected.name} />
-          <DrawerRow label="type" value={<Tag color={typeColor(clientType(selected))}>{clientType(selected)}</Tag>} />
-          <DrawerRow label="grant_types" value={
+        <Drawer title={t("clientDetail")} subtitle={selected.name} onClose={() => setSelected(null)} width={500}>
+          <DrawerRow label={t("clientId")} value={<Mono style={{ fontSize: sz.sm }}>{selected.id}</Mono>} />
+          <DrawerRow label={t("name")} value={selected.name} />
+          <DrawerRow label={t("type")} value={<Tag color={typeColor(clientType(selected))}>{t(`typeValue.${clientType(selected)}`)}</Tag>} />
+          <DrawerRow label={t("grantTypes")} value={
             <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
               {selected.grant_types.map((g) => <Tag key={g} color={C.blue}>{g}</Tag>)}
             </div>
           } />
-          <DrawerRow label="response_types" value={
+          <DrawerRow label={t("responseTypes")} value={
             <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
               {selected.response_types.map((r) => <Tag key={r} color={C.textDim}>{r}</Tag>)}
             </div>
           } />
-          <DrawerRow label="auth_method" value={<Mono>{selected.token_endpoint_auth_method}</Mono>} />
-          <DrawerRow label="status" value={<><StatusDot status={selected.status} />{selected.status}</>} />
-          <DrawerRow label="redirect_uris" value={
+          <DrawerRow label={t("authMethod")} value={<Mono>{selected.token_endpoint_auth_method}</Mono>} />
+          <DrawerRow label={t("status")} value={<><StatusDot status={selected.status} />{t(`statusValue.${selected.status}`, { defaultValue: selected.status })}</>} />
+          <DrawerRow label={t("redirectUris")} value={
             selected.redirect_uris.length > 0
               ? <div>{selected.redirect_uris.map((u) => <div key={u}><Mono style={{ fontSize: sz.sm }}>{u}</Mono></div>)}</div>
-              : <span style={{ color: C.textDim }}>none</span>
+              : <span style={{ color: C.textDim }}>{t("none")}</span>
           } />
-          <DrawerRow label="registration" value={selected.registration_source} />
-          <DrawerRow label="issued_at" value={formatDate(selected.issued_at)} />
-          <DrawerRow label="updated_at" value={formatDate(selected.updated_at)} />
-          {selected.cimd_url && <DrawerRow label="cimd_url" value={<Mono style={{ fontSize: sz.sm }}>{selected.cimd_url}</Mono>} />}
+          <DrawerRow label={t("registration")} value={t(`registrationValue.${selected.registration_source}`, { defaultValue: selected.registration_source })} />
+          <DrawerRow label={t("issuedAt")} value={formatDate(selected.issued_at, i18n.language)} />
+          <DrawerRow label={t("updatedAt")} value={formatDate(selected.updated_at, i18n.language)} />
+          {selected.cimd_url && <DrawerRow label={t("cimdUrl")} value={<Mono style={{ fontSize: sz.sm }}>{selected.cimd_url}</Mono>} />}
 
           <div style={{ marginTop: 20 }}>
-            <SectionTitle>Actions</SectionTitle>
+            <SectionTitle>{t("actions")}</SectionTitle>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              <Btn secondary small full onClick={() => openEditForm(selected)}>Edit Client</Btn>
+              <Btn secondary small full onClick={() => openEditForm(selected)}>{t("editClient")}</Btn>
               {selected.token_endpoint_auth_method !== "none" && (
                 <Btn secondary small full onClick={() => handleRotateSecret(selected.id)} disabled={rotating}>
-                  {rotating ? "Rotating..." : "Rotate Secret"}
+                  {rotating ? t("rotating") : t("rotateSecret")}
                 </Btn>
               )}
               {selected.status === "active" ? (
-                <Btn secondary small full onClick={() => handleSuspend(selected.id)}>Suspend Client</Btn>
+                <Btn secondary small full onClick={() => handleSuspend(selected.id)}>{t("suspendClient")}</Btn>
               ) : selected.status === "suspended" ? (
-                <Btn secondary small full onClick={() => handleReactivate(selected.id)}>Reactivate Client</Btn>
+                <Btn secondary small full onClick={() => handleReactivate(selected.id)}>{t("reactivateClient")}</Btn>
               ) : null}
-              <Btn danger small full onClick={() => handleRevoke(selected.id)}>Revoke All Tokens</Btn>
+              <Btn danger small full onClick={() => handleRevoke(selected.id)}>{t("revokeAllTokens")}</Btn>
             </div>
           </div>
         </Drawer>
@@ -488,23 +490,23 @@ export default function Clients() {
 
       {/* Create Client Drawer */}
       {showCreate && (
-        <Drawer title="Create Client" onClose={() => setShowCreate(false)} width={520}>
+        <Drawer title={t("createClient")} onClose={() => setShowCreate(false)} width={520}>
           <div style={{ display: "grid", gap: 16 }}>
             <div>
-              <Label>Client Name *</Label>
-              <TextInput placeholder="e.g. My MCP App" value={form.name} onChange={(v) => setForm((f) => ({ ...f, name: v }))} />
+              <Label>{t("clientNameRequired")}</Label>
+              <TextInput placeholder={t("namePlaceholder")} value={form.name} onChange={(v) => setForm((f) => ({ ...f, name: v }))} />
               {formErrors.name && <div style={{ fontSize: sz.sm, color: C.danger, marginTop: 3 }}>{formErrors.name}</div>}
             </div>
 
             <div>
-              <Label>Redirect URIs (comma-separated)</Label>
-              <TextInput placeholder="e.g. http://localhost:3000/callback, https://app.example.com/callback" value={form.redirect_uris} onChange={(v) => setForm((f) => ({ ...f, redirect_uris: v }))} />
+              <Label>{t("redirectUrisComma")}</Label>
+              <TextInput placeholder={t("redirectUrisPlaceholder")} value={form.redirect_uris} onChange={(v) => setForm((f) => ({ ...f, redirect_uris: v }))} />
               {formErrors.redirect_uris && <div style={{ fontSize: sz.sm, color: C.danger, marginTop: 3 }}>{formErrors.redirect_uris}</div>}
-              <div style={{ fontSize: sz.sm, color: C.textDim, marginTop: 4 }}>Required for authorization_code grant. Exact match enforced.</div>
+              <div style={{ fontSize: sz.sm, color: C.textDim, marginTop: 4 }}>{t("redirectUrisHint")}</div>
             </div>
 
             <div>
-              <Label>Grant Types *</Label>
+              <Label>{t("grantTypesRequired")}</Label>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {GRANT_TYPE_OPTIONS.map((gt) => (
                   <button
@@ -529,7 +531,7 @@ export default function Clients() {
             </div>
 
             <div>
-              <Label>Token Endpoint Auth Method *</Label>
+              <Label>{t("tokenEndpointAuthMethodRequired")}</Label>
               <select
                 value={form.token_endpoint_auth_method}
                 onChange={(e) => setForm((f) => ({ ...f, token_endpoint_auth_method: e.target.value }))}
@@ -547,63 +549,63 @@ export default function Clients() {
                 }}
               >
                 {AUTH_METHOD_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  <option key={opt.value} value={opt.value}>{t(opt.label)}</option>
                 ))}
               </select>
               {formErrors.auth_method && <div style={{ fontSize: sz.sm, color: C.danger, marginTop: 3 }}>{formErrors.auth_method}</div>}
               <div style={{ fontSize: sz.sm, color: C.textDim, marginTop: 4 }}>
                 {form.token_endpoint_auth_method === "none"
-                  ? "Public client — no secret will be generated."
-                  : "Confidential client — a client_secret will be generated once."}
+                  ? t("publicClientHint")
+                  : t("confidentialClientHint")}
               </div>
             </div>
 
             <div>
-              <Label>Scope (space-separated)</Label>
-              <TextInput placeholder="e.g. read write admin" value={form.scope} onChange={(v) => setForm((f) => ({ ...f, scope: v }))} />
-              <div style={{ fontSize: sz.sm, color: C.textDim, marginTop: 4 }}>Optional. Leave blank for no scope restriction.</div>
+              <Label>{t("scopeSpaceSeparated")}</Label>
+              <TextInput placeholder={t("scopePlaceholder")} value={form.scope} onChange={(v) => setForm((f) => ({ ...f, scope: v }))} />
+              <div style={{ fontSize: sz.sm, color: C.textDim, marginTop: 4 }}>{t("scopeCreateHint")}</div>
             </div>
 
             <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0" }}>
               <Toggle checked={form.is_agent} onChange={(v) => setForm((f) => ({ ...f, is_agent: v }))} />
-              <div style={{ fontSize: sz.base, color: C.textDim }}>{form.is_agent ? "Agent client — acts as an MCP agent" : "Standard OAuth client"}</div>
+              <div style={{ fontSize: sz.base, color: C.textDim }}>{form.is_agent ? t("agentClientHint") : t("standardClientHint")}</div>
             </div>
 
             {form.is_agent && (
               <div>
-                <Label>Agent Description *</Label>
-                <TextInput rows={2} placeholder="Describe what this agent does..." value={form.agent_description} onChange={(v) => setForm((f) => ({ ...f, agent_description: v }))} />
+                <Label>{t("agentDescriptionRequiredLabel")}</Label>
+                <TextInput rows={2} placeholder={t("agentDescriptionPlaceholder")} value={form.agent_description} onChange={(v) => setForm((f) => ({ ...f, agent_description: v }))} />
                 {formErrors.agent_description && <div style={{ fontSize: sz.sm, color: C.danger, marginTop: 3 }}>{formErrors.agent_description}</div>}
               </div>
             )}
           </div>
 
           <div style={{ display: "flex", gap: 10, marginTop: 24, paddingTop: 16, borderTop: `1px solid ${C.border}` }}>
-            <Btn secondary onClick={() => setShowCreate(false)}>Cancel</Btn>
-            <Btn onClick={handleCreate} disabled={creating}>{creating ? "Creating..." : "Create Client"}</Btn>
+            <Btn secondary onClick={() => setShowCreate(false)}>{t("cancel")}</Btn>
+            <Btn onClick={handleCreate} disabled={creating}>{creating ? t("creating") : t("createClient")}</Btn>
           </div>
         </Drawer>
       )}
 
       {/* Edit Client Drawer */}
       {showEdit && editTarget && (
-        <Drawer title="Edit Client" subtitle={editTarget.name} onClose={() => setShowEdit(false)} width={520}>
+        <Drawer title={t("editClient")} subtitle={editTarget.name} onClose={() => setShowEdit(false)} width={520}>
           <div style={{ display: "grid", gap: 16 }}>
             <div>
-              <Label>Client Name *</Label>
-              <TextInput placeholder="e.g. My MCP App" value={editForm.name} onChange={(v) => setEditForm((f) => ({ ...f, name: v }))} />
+              <Label>{t("clientNameRequired")}</Label>
+              <TextInput placeholder={t("namePlaceholder")} value={editForm.name} onChange={(v) => setEditForm((f) => ({ ...f, name: v }))} />
               {editFormErrors.name && <div style={{ fontSize: sz.sm, color: C.danger, marginTop: 3 }}>{editFormErrors.name}</div>}
             </div>
 
             <div>
-              <Label>Redirect URIs (comma-separated)</Label>
-              <TextInput placeholder="e.g. http://localhost:3000/callback, https://app.example.com/callback" value={editForm.redirect_uris} onChange={(v) => setEditForm((f) => ({ ...f, redirect_uris: v }))} />
+              <Label>{t("redirectUrisComma")}</Label>
+              <TextInput placeholder={t("redirectUrisPlaceholder")} value={editForm.redirect_uris} onChange={(v) => setEditForm((f) => ({ ...f, redirect_uris: v }))} />
               {editFormErrors.redirect_uris && <div style={{ fontSize: sz.sm, color: C.danger, marginTop: 3 }}>{editFormErrors.redirect_uris}</div>}
-              <div style={{ fontSize: sz.sm, color: C.textDim, marginTop: 4 }}>Required for authorization_code grant. Exact match enforced.</div>
+              <div style={{ fontSize: sz.sm, color: C.textDim, marginTop: 4 }}>{t("redirectUrisHint")}</div>
             </div>
 
             <div>
-              <Label>Grant Types *</Label>
+              <Label>{t("grantTypesRequired")}</Label>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {GRANT_TYPE_OPTIONS.map((gt) => (
                   <button
@@ -628,28 +630,28 @@ export default function Clients() {
             </div>
 
             <div>
-              <Label>Scope (space-separated)</Label>
-              <TextInput placeholder="e.g. read write admin" value={editForm.scope} onChange={(v) => setEditForm((f) => ({ ...f, scope: v }))} />
-              <div style={{ fontSize: sz.sm, color: C.textDim, marginTop: 4 }}>Optional. Leave blank to keep existing scope unchanged.</div>
+              <Label>{t("scopeSpaceSeparated")}</Label>
+              <TextInput placeholder={t("scopePlaceholder")} value={editForm.scope} onChange={(v) => setEditForm((f) => ({ ...f, scope: v }))} />
+              <div style={{ fontSize: sz.sm, color: C.textDim, marginTop: 4 }}>{t("scopeEditHint")}</div>
             </div>
           </div>
 
           <div style={{ display: "flex", gap: 10, marginTop: 24, paddingTop: 16, borderTop: `1px solid ${C.border}` }}>
-            <Btn secondary onClick={() => setShowEdit(false)}>Cancel</Btn>
-            <Btn onClick={handleEdit} disabled={saving}>{saving ? "Saving..." : "Save Changes"}</Btn>
+            <Btn secondary onClick={() => setShowEdit(false)}>{t("cancel")}</Btn>
+            <Btn onClick={handleEdit} disabled={saving}>{saving ? t("saving") : t("saveChanges")}</Btn>
           </div>
         </Drawer>
       )}
 
       {/* Client Secret Display Modal — shown once after creation */}
       {createdResult && (
-        <Modal title="Client Created" titleColor={C.success} width={540} onClose={handleDismissSecret}>
+        <Modal title={t("clientCreated")} titleColor={C.success} width={540} onClose={handleDismissSecret}>
           <div style={{ fontSize: sz.base, color: C.textDim, lineHeight: 1.8, marginBottom: 16 }}>
-            <strong style={{ color: C.text }}>{createdResult.client_name}</strong> has been created.
+            {t("createdMessage", { name: createdResult.client_name })}
           </div>
 
           <div style={{ marginBottom: 12 }}>
-            <Label>Client ID</Label>
+            <Label>{t("clientId")}</Label>
             <div style={{
               padding: "8px 12px",
               background: C.surface2,
@@ -666,7 +668,7 @@ export default function Clients() {
 
           {createdResult.client_secret && (
             <div style={{ marginBottom: 16 }}>
-              <Label>Client Secret</Label>
+              <Label>{t("clientSecret")}</Label>
               <div style={{
                 padding: "10px 12px",
                 background: alpha(C.warn, 0x12),
@@ -685,7 +687,7 @@ export default function Clients() {
                   {createdResult.client_secret}
                 </div>
                 <Btn small onClick={handleCopySecret}>
-                  {secretCopied ? "Copied!" : "Copy to Clipboard"}
+                  {secretCopied ? t("copied") : t("copyToClipboard")}
                 </Btn>
               </div>
               <div style={{
@@ -694,7 +696,7 @@ export default function Clients() {
                 fontWeight: 600,
                 lineHeight: 1.6,
               }}>
-                This secret is shown only once. Copy it now — it cannot be retrieved later.
+                {t("oneTimeSecretWarning")}
               </div>
             </div>
           )}
@@ -709,25 +711,25 @@ export default function Clients() {
               color: C.blue,
               marginBottom: 16,
             }}>
-              Public client — no client secret was generated.
+              {t("noSecretGenerated")}
             </div>
           )}
 
           <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
-            <Btn onClick={handleDismissSecret}>Done</Btn>
+            <Btn onClick={handleDismissSecret}>{t("done")}</Btn>
           </div>
         </Modal>
       )}
 
       {/* Rotated Secret Display Modal — shown once after rotation */}
       {rotatedResult && (
-        <Modal title="Secret Rotated" titleColor={C.success} width={540} onClose={handleDismissRotatedSecret}>
+        <Modal title={t("secretRotated")} titleColor={C.success} width={540} onClose={handleDismissRotatedSecret}>
           <div style={{ fontSize: sz.base, color: C.textDim, lineHeight: 1.8, marginBottom: 16 }}>
-            The client secret for <Mono style={{ fontSize: sz.sm }}>{rotatedResult.client_id}</Mono> has been rotated.
+            {t("rotatedMessage", { id: rotatedResult.client_id })}
           </div>
 
           <div style={{ marginBottom: 12 }}>
-            <Label>Client ID</Label>
+            <Label>{t("clientId")}</Label>
             <div style={{
               padding: "8px 12px",
               background: C.surface2,
@@ -743,7 +745,7 @@ export default function Clients() {
           </div>
 
           <div style={{ marginBottom: 16 }}>
-            <Label>New Client Secret</Label>
+            <Label>{t("newClientSecret")}</Label>
             <div style={{
               padding: "10px 12px",
               background: alpha(C.warn, 0x12),
@@ -762,7 +764,7 @@ export default function Clients() {
                 {rotatedResult.client_secret}
               </div>
               <Btn small onClick={handleCopyRotatedSecret}>
-                {rotatedSecretCopied ? "Copied!" : "Copy to Clipboard"}
+                {rotatedSecretCopied ? t("copied") : t("copyToClipboard")}
               </Btn>
             </div>
             <div style={{
@@ -771,13 +773,12 @@ export default function Clients() {
               fontWeight: 600,
               lineHeight: 1.6,
             }}>
-              This secret is shown only once. Copy it now — it cannot be retrieved later.
-              The previous secret has been invalidated.
+              {t("rotatedSecretWarning")}
             </div>
           </div>
 
           <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
-            <Btn onClick={handleDismissRotatedSecret}>Done</Btn>
+            <Btn onClick={handleDismissRotatedSecret}>{t("done")}</Btn>
           </div>
         </Modal>
       )}

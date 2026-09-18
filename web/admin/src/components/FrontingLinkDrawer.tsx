@@ -28,6 +28,7 @@ import Mono from "./Mono";
 import Tag from "./Tag";
 import TextInput from "./TextInput";
 import ScopeMapEditor from "./ScopeMapEditor";
+import { useTranslation } from "../i18n";
 
 interface FrontingLinkDrawerProps {
   mode: "create" | "edit";
@@ -56,6 +57,7 @@ export default function FrontingLinkDrawer({
   onClose,
   onSaved,
 }: FrontingLinkDrawerProps) {
+  const { t } = useTranslation("fronting");
   const [source, setSource] = useState(
     mode === "edit" ? link!.source_slug : initialSource ?? "",
   );
@@ -116,17 +118,17 @@ export default function FrontingLinkDrawer({
 
   const validateClient = (): FormErrors => {
     const e: FormErrors = {};
-    if (!source) e.source = "Source is required";
-    if (!target) e.target = "Target is required";
+    if (!source) e.source = t("sourceRequired");
+    if (!target) e.target = t("targetRequired");
     if (source && target && source === target) {
-      e.target = "Source and target must differ";
+      e.target = t("differentResources");
     }
     if (Object.keys(scopeMap).length === 0) {
-      e.scope_map = "At least one mapping required";
+      e.scope_map = t("mappingRequired");
     } else {
       for (const [k, v] of Object.entries(scopeMap)) {
         if (v.length === 0) {
-          e.scope_map = `Mapping for ${k} needs at least one target scope`;
+          e.scope_map = t("mappingTargetRequired", { scope: k });
           break;
         }
       }
@@ -145,7 +147,7 @@ export default function FrontingLinkDrawer({
     } catch (err) {
       setValidateState({
         kind: "error",
-        message: err instanceof Error ? err.message : "Validation failed",
+        message: err instanceof Error ? err.message : t("validationFailed"),
       });
     } finally {
       setValidating(false);
@@ -169,7 +171,7 @@ export default function FrontingLinkDrawer({
     } catch (err) {
       setValidateState({
         kind: "error",
-        message: err instanceof Error ? err.message : "Save failed",
+        message: err instanceof Error ? err.message : t("saveFailed"),
       });
     } finally {
       setSaving(false);
@@ -184,7 +186,7 @@ export default function FrontingLinkDrawer({
     } catch (err) {
       setValidateState({
         kind: "error",
-        message: err instanceof Error ? err.message : "Delete failed",
+        message: err instanceof Error ? err.message : t("deleteFailed"),
       });
       setConfirmingDelete(false);
     }
@@ -202,7 +204,7 @@ export default function FrontingLinkDrawer({
     <>
       <Drawer
         title={
-          mode === "create" ? "New Fronting Link" : "Edit Fronting Link"
+          mode === "create" ? t("newDrawer") : t("editDrawer")
         }
         subtitle={
           mode === "edit"
@@ -214,10 +216,10 @@ export default function FrontingLinkDrawer({
       >
         <div style={{ display: "grid", gap: 16 }}>
           <div>
-            <Label>Source (Mint resource) *</Label>
+            <Label>{t("sourceLabel")}</Label>
             {mode === "edit" ? (
               <div
-                title="Source can't be changed on edit — delete and recreate to repoint."
+                title={t("sourceReadOnlyTitle")}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -235,7 +237,7 @@ export default function FrontingLinkDrawer({
                     {sourceResource.display_name}
                   </span>
                 )}
-                <Tag color={C.textDim}>read-only</Tag>
+                <Tag color={C.textDim}>{t("readOnly")}</Tag>
               </div>
             ) : (
               <select
@@ -252,7 +254,7 @@ export default function FrontingLinkDrawer({
                   fontFamily: fonts.mono,
                 }}
               >
-                <option value="">Select a Mint resource…</option>
+                <option value="">{t("selectMint")}</option>
                 {mintResources.map((r) => (
                   <option key={r.id} value={r.slug}>
                     {r.slug} — {r.display_name}
@@ -270,10 +272,10 @@ export default function FrontingLinkDrawer({
           </div>
 
           <div>
-            <Label>Target (Mint or Broker resource) *</Label>
+            <Label>{t("targetLabel")}</Label>
             {mode === "edit" ? (
               <div
-                title="Target can't be changed on edit — delete and recreate to repoint."
+                title={t("targetReadOnlyTitle")}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -302,7 +304,7 @@ export default function FrontingLinkDrawer({
                     {targetResource.display_name}
                   </span>
                 )}
-                <Tag color={C.textDim}>read-only</Tag>
+                <Tag color={C.textDim}>{t("readOnly")}</Tag>
               </div>
             ) : (
               <select
@@ -319,7 +321,7 @@ export default function FrontingLinkDrawer({
                   fontFamily: fonts.mono,
                 }}
               >
-                <option value="">Select a target resource…</option>
+                <option value="">{t("selectTargetResource")}</option>
                 {resources.map((r) => (
                   <option key={r.id} value={r.slug}>
                     {r.slug} ({r.backend_kind}) — {r.display_name}
@@ -337,12 +339,11 @@ export default function FrontingLinkDrawer({
           </div>
 
           <div>
-            <Label>Scope map *</Label>
+            <Label>{t("scopeMapLabel")}</Label>
             <div
               style={{ fontSize: sz.sm, color: C.textDim, marginBottom: 8 }}
             >
-              Each row maps one source scope to one or more target scopes.
-              Both sides come from the chosen Resources' scope lists.
+              {t("scopeMapHelp")}
             </div>
             <ScopeMapEditor
               sourceScopes={
@@ -375,8 +376,7 @@ export default function FrontingLinkDrawer({
                 fontSize: sz.sm,
               }}
             >
-              ✓ Validation OK — scope map references known scopes; no cycle
-              would be introduced.
+              {t("validationOk")}
             </div>
           )}
           {validateState.kind === "error" && (
@@ -395,14 +395,9 @@ export default function FrontingLinkDrawer({
           )}
 
           <InfoBox color={C.blue}>
-            Each fronting link bridges <strong>one</strong> source resource
-            to <strong>one</strong> target resource. The scope map's values
-            must be scopes of the chosen target only — to bridge to a
-            different target, create a separate fronting link.
+            {t("linkHelp")}
             <br />
-            Validate posts a dry-run for cycle and scope-membership checks
-            before commit. On edit, only scope_map is patchable;
-            re-pointing source/target requires delete + create.
+            {t("validationHelp")}
           </InfoBox>
         </div>
 
@@ -418,18 +413,18 @@ export default function FrontingLinkDrawer({
         >
           <div style={{ display: "flex", gap: 10 }}>
             <Btn secondary onClick={onClose}>
-              Cancel
+              {t("cancel")}
             </Btn>
             <Btn secondary onClick={handleValidate} disabled={validating}>
-              {validating ? "Validating…" : "Validate"}
+              {validating ? t("validating") : t("validate")}
             </Btn>
             <Btn onClick={handleSave} disabled={saveDisabled}>
-              {saving ? "Saving…" : "Save"}
+              {saving ? t("saving") : t("save")}
             </Btn>
           </div>
           {mode === "edit" && (
             <Btn danger small onClick={() => setConfirmingDelete(true)}>
-              Delete
+              {t("delete")}
             </Btn>
           )}
         </div>
@@ -437,7 +432,7 @@ export default function FrontingLinkDrawer({
 
       {confirmingDelete && link && (
         <Modal
-          title={`Delete ${link.source_slug} → ${link.target_slug}?`}
+          title={t("deleteTitle", { source: link.source_slug, target: link.target_slug })}
           onClose={() => {
             setConfirmingDelete(false);
             setDelInput("");
@@ -451,10 +446,10 @@ export default function FrontingLinkDrawer({
               marginBottom: 14,
             }}
           >
-            This removes the fronting-link row only. Both Resources stay.
+            {t("deleteHelp")}
           </div>
           <div style={{ fontSize: sz.sm, color: C.textDim, marginBottom: 6 }}>
-            Type <strong>{deleteConfirmKey}</strong> to confirm:
+            {t("deleteConfirm", { key: deleteConfirmKey })}
           </div>
           <TextInput
             value={delInput}
@@ -471,7 +466,7 @@ export default function FrontingLinkDrawer({
                 setDelInput("");
               }}
             >
-              Cancel
+              {t("cancel")}
             </Btn>
             <Btn
               danger
@@ -479,7 +474,7 @@ export default function FrontingLinkDrawer({
               disabled={delInput !== deleteConfirmKey}
               onClick={handleDelete}
             >
-              Delete
+              {t("delete")}
             </Btn>
           </div>
         </Modal>

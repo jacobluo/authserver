@@ -17,12 +17,14 @@ import TextInput from "../components/TextInput";
 import Toast from "../components/Toast";
 import FrontingLinkDrawer from "../components/FrontingLinkDrawer";
 import FrontingGraph from "../components/FrontingGraph";
+import { useTranslation } from "../i18n";
 
 type Tab = "list" | "graph";
 type Editing = FrontingLinkView | "new" | null;
 type KindFilter = "all" | "mint-mint" | "mint-broker";
 
 export default function Fronting() {
+  const { t } = useTranslation("fronting");
   const [links, setLinks] = useState<FrontingLinkView[]>([]);
   const [resources, setResources] = useState<ResourceView[]>([]);
   const [tab, setTab] = useState<Tab>("list");
@@ -52,9 +54,9 @@ export default function Fronting() {
       setResources(rs);
       setError("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load");
+      setError(err instanceof Error ? err.message : t("loadFailed"));
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     load();
@@ -88,10 +90,10 @@ export default function Fronting() {
       if (found) {
         setEditing(found);
       } else {
-        showToast(`Fronting link ${src} → ${tgt} not found`, "error");
+        showToast(t("notFound", { source: src, target: tgt }), "error");
       }
     }
-  }, [links]);
+  }, [links, t]);
 
   // Slug → backend_kind, used by the kind filter to decide whether a link's
   // target is a Mint or Broker. Memoized so the filter pass below stays O(N)
@@ -125,13 +127,12 @@ export default function Fronting() {
             fontWeight: 600,
           }}
         >
-          Fronting
+          {t("title")}
         </div>
         <div
           style={{ fontSize: sz.base, color: C.textDim, marginTop: 2 }}
         >
-          Cross-Mint fronting links — operator-declared bridges that let one
-          Mint resource exchange tokens for another via RFC 8693.
+          {t("description")}
         </div>
       </div>
 
@@ -162,27 +163,27 @@ export default function Fronting() {
         }}
       >
         <div style={{ display: "flex", gap: 4 }}>
-          {(["list", "graph"] as const).map((t) => (
+          {(["list", "graph"] as const).map((tabName) => (
             <button
-              key={t}
-              onClick={() => setTab(t)}
+              key={tabName}
+              onClick={() => setTab(tabName)}
               style={{
                 padding: "5px 14px",
                 borderRadius: 5,
-                border: `1px solid ${tab === t ? alpha(C.accent, 0x50) : C.border2}`,
-                background: tab === t ? alpha(C.accent, 0x18) : "transparent",
-                color: tab === t ? C.accent : C.textDim,
+                border: `1px solid ${tab === tabName ? alpha(C.accent, 0x50) : C.border2}`,
+                background: tab === tabName ? alpha(C.accent, 0x18) : "transparent",
+                color: tab === tabName ? C.accent : C.textDim,
                 cursor: "pointer",
                 fontFamily: fonts.mono,
                 fontSize: sz.sm,
                 transition: "all 0.15s",
               }}
             >
-              {t}
+              {t(tabName)}
             </button>
           ))}
         </div>
-        <Btn onClick={() => setEditing("new")}>+ New Fronting Link</Btn>
+        <Btn onClick={() => setEditing("new")}>{t("newLink")}</Btn>
       </div>
 
       {tab === "list" && (
@@ -198,14 +199,14 @@ export default function Fronting() {
           >
             <div style={{ width: 220 }}>
               <TextInput
-                placeholder="Filter source slug…"
+                placeholder={t("filterSource")}
                 value={filterSource}
                 onChange={setFilterSource}
               />
             </div>
             <div style={{ width: 220 }}>
               <TextInput
-                placeholder="Filter target slug…"
+                placeholder={t("filterTarget")}
                 value={filterTarget}
                 onChange={setFilterTarget}
               />
@@ -217,9 +218,9 @@ export default function Fronting() {
             <div style={{ display: "flex", gap: 4 }}>
               {(
                 [
-                  ["all", "all"],
-                  ["mint-mint", "Mint→Mint"],
-                  ["mint-broker", "Mint→Broker"],
+                  ["all", t("all")],
+                  ["mint-mint", t("mintToMint")],
+                  ["mint-broker", t("mintToBroker")],
                 ] as [KindFilter, string][]
               ).map(([opt, label]) => (
                 <button
@@ -255,7 +256,7 @@ export default function Fronting() {
                 color: C.warn,
               }}
             >
-              Showing first 100 links. Use filters to narrow.
+              {t("limitNotice")}
             </div>
           )}
 
@@ -269,7 +270,7 @@ export default function Fronting() {
             >
               <thead>
                 <tr>
-                  {["Source", "Target", "Scope map", "Created", "Created by"].map(
+                  {[t("source"), t("target"), t("scopeMap"), t("created"), t("createdBy")].map(
                     (h) => (
                       <th
                         key={h}
@@ -293,7 +294,7 @@ export default function Fronting() {
               </thead>
               <tbody>
                 {filtered.map((l) => {
-                  const summary = scopeMapSummary(l.scope_map);
+                  const summary = scopeMapSummary(l.scope_map, t);
                   return (
                     <tr
                       key={`${l.source_slug}/${l.target_slug}`}
@@ -344,8 +345,8 @@ export default function Fronting() {
                 }}
               >
                 {links.length === 0
-                  ? "No fronting links yet. Create one to bridge two Mint resources."
-                  : "No links match your filters."}
+                  ? t("empty")
+                  : t("noMatches")}
               </div>
             )}
           </Card>
@@ -384,7 +385,7 @@ export default function Fronting() {
             const wasCreate = editing === "new";
             setEditing(null);
             setInitialCreateSource("");
-            showToast(wasCreate ? "Fronting link created" : "Saved");
+            showToast(wasCreate ? t("createdToast") : t("savedToast"));
             load();
           }}
         />
@@ -396,9 +397,9 @@ export default function Fronting() {
 }
 
 // Compact summary for the table column: e.g. "2 keys → 3 values".
-function scopeMapSummary(m: Record<string, string[]>): string {
+function scopeMapSummary(m: Record<string, string[]>, t: ReturnType<typeof useTranslation>["t"]): string {
   const keys = Object.keys(m).length;
   const values = new Set(Object.values(m).flat()).size;
-  if (keys === 0) return "(empty)";
-  return `${keys} key${keys === 1 ? "" : "s"} → ${values} value${values === 1 ? "" : "s"}`;
+  if (keys === 0) return t("emptySummary");
+  return `${t("keyCount", { count: keys })} → ${t("valueCount", { count: values })}`;
 }

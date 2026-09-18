@@ -12,7 +12,8 @@
 4. [Add an upstream provider](add-an-upstream-provider.md) — the most common extension.
 5. [Add a grant type](add-a-grant-type.md) — the next most common extension.
 6. [Running tests](running-tests.md) — unit, integration, e2e, docs-smoke.
-7. [Release process](release-process.md) — tagging, goreleaser, Helm bump.
+7. [UI localization](localization.md) — translation catalogs and upstream-merge workflow.
+8. [Release process](release-process.md) — tagging, goreleaser, Helm bump.
 
 ## Conventions used in this section
 

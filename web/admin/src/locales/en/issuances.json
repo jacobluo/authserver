@@ -1,0 +1,12 @@
+{
+  "title": "Issuances", "subtitle": "Forensic record of every token Authplane has minted or brokered. Combine user / client / resource / JTI filters to narrow the result.",
+  "directoryLoadFailed": "Failed to load directory", "searchFailed": "Search failed", "filterRequired": "Pick at least one filter (user, client, resource, or JTI)", "revokedToast": "Issuance revoked", "revokeFailed": "Failed to revoke",
+  "user": "User", "client": "Client", "resource": "Resource", "any": "— any —", "jtiPlaceholder": "Paste a JTI…",
+  "last24h": "Last 24h", "last7d": "Last 7d", "last30d": "Last 30d", "sinceIgnored": "since window ignored for JTI lookups", "clear": "Clear", "searching": "Searching…", "search": "Search", "searchWithFilters": "Search ({{count}} filters)",
+  "resultCount": "{{count}} issuances", "resultCount_one": "{{count}} issuance", "resultCount_other": "{{count}} issuances", "since": "since {{date}}", "noJtiMatch": "No issuance with that JTI.", "noMatches": "No issuances match the current filters.",
+  "backend": "Backend", "scopes": "Scopes", "issued": "Issued", "status": "Status", "revoke": "Revoke", "detailTitle": "Issuance Detail", "brokerNoJti": "(broker — no JTI)",
+  "filterByUser": "Filter issuances by this user", "filterByClient": "Filter issuances by this client", "filterByResource": "Filter issuances by this resource",
+  "revocable": "Revocable", "yes": "yes", "no": "no", "issuedAt": "Issued at", "expiresAt": "Expires at", "revokedAt": "Revoked at", "agentChain": "Agent Chain", "rawRecord": "Raw record",
+  "revokeIssuance": "Revoke Issuance", "revokeTitle": "Revoke issuance?", "revokeDescriptionBefore": "Revoke this issuance (jti=", "revokeDescriptionAfter": ")? Mint tokens become inactive at next introspection; Broker tokens keep working at the upstream until they expire.", "cancel": "Cancel", "revoking": "Revoking…",
+  "backendValue": { "mint": "Mint", "broker": "Broker" }, "statusValue": { "active": "active", "revoked": "revoked", "expired": "expired" }
+}

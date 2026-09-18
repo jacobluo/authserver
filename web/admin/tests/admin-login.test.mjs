@@ -30,9 +30,9 @@ test("login defaults to account credentials with an API key fallback", () => {
   const Login = require(resolve(projectDir, "src/pages/Login.tsx")).default;
   const html = renderToStaticMarkup(createElement(Login, { onLogin() {} }));
 
-  assert.match(html, /Email/);
-  assert.match(html, /Password/);
-  assert.match(html, /Use API Key/);
+  assert.match(html, /邮箱/);
+  assert.match(html, /密码/);
+  assert.match(html, /使用 API 密钥/);
 });
 
 test("admin authentication credentials remain in memory and cookie writes carry CSRF", () => {

@@ -31,6 +31,7 @@ import TextInput from "../components/TextInput";
 import Modal from "../components/Modal";
 import Toast from "../components/Toast";
 import SectionTitle from "../components/SectionTitle";
+import { i18n, useTranslation } from "../i18n";
 
 interface RevokeTarget {
   kind: "consent" | "broker";
@@ -38,13 +39,14 @@ interface RevokeTarget {
   description: string;
 }
 
-function formatDate(iso: string | undefined): string {
+function formatDate(iso: string | undefined, locale: string): string {
   if (!iso) return "—";
   const d = new Date(iso);
-  return d.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleString(locale, { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
 export default function Grants() {
+  const { t } = useTranslation("grants");
   const [users, setUsers] = useState<UserView[]>([]);
   const [clients, setClients] = useState<ClientView[]>([]);
   const [resources, setResources] = useState<ResourceView[]>([]);
@@ -76,9 +78,9 @@ export default function Grants() {
       setProviders(ps);
       setError("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load directory");
+      setError(err instanceof Error ? err.message : t("directoryLoadFailed"));
     }
-  }, []);
+  }, [t]);
 
   const loadGrants = useCallback(async (userID: string) => {
     setLoadingGrants(true);
@@ -86,12 +88,12 @@ export default function Grants() {
       const g = await listUserGrants(userID);
       setGrants(g);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to load grants", "error");
+      showToast(err instanceof Error ? err.message : t("grantsLoadFailed"), "error");
       setGrants(null);
     } finally {
       setLoadingGrants(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => { loadDirectory(); }, [loadDirectory]);
 
@@ -115,24 +117,24 @@ export default function Grants() {
     try {
       if (revokeTarget.kind === "consent") {
         await revokeConsentGrant(revokeTarget.id);
-        showToast("Consent grant revoked");
+        showToast(t("consentRevoked"));
       } else {
         await revokeBrokerGrant(revokeTarget.id);
-        showToast("Broker grant revoked");
+        showToast(t("brokerRevoked"));
       }
       setRevokeTarget(null);
       if (selectedUser) loadGrants(selectedUser.id);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to revoke", "error");
+      showToast(err instanceof Error ? err.message : t("revokeFailed"), "error");
     }
   };
 
   return (
     <div style={{ padding: 28 }}>
       <div style={{ marginBottom: 20 }}>
-        <div style={{ fontFamily: fonts.mono, fontSize: sz.xl, fontWeight: 600 }}>Grants</div>
+        <div style={{ fontFamily: fonts.mono, fontSize: sz.xl, fontWeight: 600 }}>{t("title")}</div>
         <div style={{ fontSize: sz.base, color: C.textDim, marginTop: 2 }}>
-          Per-user authorization — consent grants (Mint exchange) and broker grants (upstream credential brokering).
+          {t("subtitle")}
         </div>
       </div>
 
@@ -145,7 +147,7 @@ export default function Grants() {
       <div style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: 18 }}>
         <Card style={{ padding: 0 }}>
           <div style={{ padding: 14, borderBottom: `1px solid ${C.border}` }}>
-            <TextInput placeholder="Search users…" value={userQuery} onChange={setUserQuery} />
+            <TextInput placeholder={t("searchUsers")} value={userQuery} onChange={setUserQuery} />
           </div>
           <div style={{ maxHeight: 540, overflowY: "auto" }}>
             {filteredUsers.map((u) => (
@@ -167,7 +169,7 @@ export default function Grants() {
               </div>
             ))}
             {filteredUsers.length === 0 && (
-              <div style={{ padding: 16, fontSize: sz.sm, color: C.textDim, textAlign: "center" }}>No users.</div>
+              <div style={{ padding: 16, fontSize: sz.sm, color: C.textDim, textAlign: "center" }}>{t("noUsers")}</div>
             )}
           </div>
         </Card>
@@ -176,12 +178,12 @@ export default function Grants() {
           {!selectedUser ? (
             <Card>
               <div style={{ padding: 20, fontSize: sz.base, color: C.textDim, textAlign: "center" }}>
-                Select a user to see their grants.
+                {t("selectUser")}
               </div>
             </Card>
           ) : loadingGrants ? (
             <Card>
-              <div style={{ padding: 20, fontSize: sz.base, color: C.textDim, textAlign: "center" }}>Loading…</div>
+              <div style={{ padding: 20, fontSize: sz.base, color: C.textDim, textAlign: "center" }}>{t("loading")}</div>
             </Card>
           ) : grants ? (
             <GrantsTables
@@ -193,14 +195,14 @@ export default function Grants() {
                 setRevokeTarget({
                   kind: "consent",
                   id: g.id,
-                  description: consentRevokeCopy(g, clients, resources),
+                  description: t("consentRevokeCopy", { client: clients.find(c => c.id === g.client_id)?.name || g.client_id, resource: resources.find(r => r.id === g.resource_id)?.slug || g.resource_id }),
                 })
               }
               onRevokeBroker={(g) =>
                 setRevokeTarget({
                   kind: "broker",
                   id: g.id,
-                  description: brokerRevokeCopy(g, providers, selectedUser),
+                  description: t("brokerRevokeCopy", { user: selectedUser.email || selectedUser.name || selectedUser.id, provider: providers.find(p => p.id === g.broker_provider_id)?.slug || g.broker_provider_id }),
                 })
               }
             />
@@ -210,7 +212,7 @@ export default function Grants() {
 
       {revokeTarget && (
         <Modal
-          title={`Revoke ${revokeTarget.kind} grant?`}
+          title={t("revokeTitle", { kind: t(revokeTarget.kind) })}
           titleColor={C.danger}
           onClose={() => setRevokeTarget(null)}
         >
@@ -218,8 +220,8 @@ export default function Grants() {
             {revokeTarget.description}
           </div>
           <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-            <Btn secondary small onClick={() => setRevokeTarget(null)}>Cancel</Btn>
-            <Btn danger small onClick={performRevoke}>Revoke</Btn>
+            <Btn secondary small onClick={() => setRevokeTarget(null)}>{t("cancel")}</Btn>
+            <Btn danger small onClick={performRevoke}>{t("revoke")}</Btn>
           </div>
         </Modal>
       )}
@@ -247,6 +249,7 @@ interface GrantsTablesProps {
 export function GrantsTables({
   grants, clients, resources, providers, onRevokeConsent, onRevokeBroker,
 }: GrantsTablesProps) {
+  const { t, i18n } = useTranslation("grants");
   const clientName = (id: string): string => {
     const c = clients.find((cl) => cl.id === id);
     return c ? c.name : id;
@@ -263,14 +266,14 @@ export function GrantsTables({
   return (
     <div style={{ display: "grid", gap: 18 }}>
       <Card>
-        <SectionTitle>Consent Grants ({grants.consent_grants.length})</SectionTitle>
+        <SectionTitle>{t("consentGrants", { count: grants.consent_grants.length })}</SectionTitle>
         {grants.consent_grants.length === 0 ? (
-          <div style={{ fontSize: sz.base, color: C.textDim, padding: "8px 0" }}>No consent grants.</div>
+          <div style={{ fontSize: sz.base, color: C.textDim, padding: "8px 0" }}>{t("noConsentGrants")}</div>
         ) : (
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: sz.base }}>
             <thead>
               <tr>
-                {["Agent", "Resource", "Scopes", "Created", "Status", ""].map((h) => (
+                {[t("agent"), t("resource"), t("scopes"), t("created"), t("status"), ""].map((h) => (
                   <th key={h} style={{ textAlign: "left", padding: "6px 10px", color: C.textDim, fontFamily: fonts.mono, fontSize: sz.xs, textTransform: "uppercase", letterSpacing: 1.2, borderBottom: `1px solid ${C.border}`, fontWeight: 400 }}>
                     {h}
                   </th>
@@ -292,26 +295,26 @@ export function GrantsTables({
                     </div>
                   </td>
                   <td style={{ padding: "8px 10px", color: C.textDim, fontSize: sz.sm }}>
-                    {formatDate(g.created_at)}
+                    {formatDate(g.created_at, i18n.language)}
                   </td>
                   <td style={{ padding: "8px 10px" }}>
                     {g.revoked_at ? (
-                      <Tag color={C.danger}>revoked</Tag>
+                      <Tag color={C.danger}>{t("revoked")}</Tag>
                     ) : (
-                      <Tag color={C.success}>active</Tag>
+                      <Tag color={C.success}>{t("active")}</Tag>
                     )}
                   </td>
                   <td style={{ padding: "8px 10px", textAlign: "right" }}>
                     <div style={{ display: "inline-flex", gap: 6 }}>
                       <a
                         href={`#/issuances?user=${encodeURIComponent(g.user_id)}&client=${encodeURIComponent(g.client_id)}&resource=${encodeURIComponent(g.resource_id)}`}
-                        title="View issuances for this (user, client, resource) tuple"
+                        title={t("viewConsentIssuances")}
                         style={grantsCrossLinkStyle}
                       >
-                        Issuances
+                        {t("issuances")}
                       </a>
                       {!g.revoked_at && (
-                        <Btn danger small onClick={() => onRevokeConsent(g)}>Revoke</Btn>
+                        <Btn danger small onClick={() => onRevokeConsent(g)}>{t("revoke")}</Btn>
                       )}
                     </div>
                   </td>
@@ -323,14 +326,14 @@ export function GrantsTables({
       </Card>
 
       <Card>
-        <SectionTitle>Broker Grants ({grants.broker_grants.length})</SectionTitle>
+        <SectionTitle>{t("brokerGrants", { count: grants.broker_grants.length })}</SectionTitle>
         {grants.broker_grants.length === 0 ? (
-          <div style={{ fontSize: sz.base, color: C.textDim, padding: "8px 0" }}>No broker grants.</div>
+          <div style={{ fontSize: sz.base, color: C.textDim, padding: "8px 0" }}>{t("noBrokerGrants")}</div>
         ) : (
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: sz.base }}>
             <thead>
               <tr>
-                {["Provider", "Scopes Granted", "Version", "Enc Backend", "Created", "Status", ""].map((h) => (
+                {[t("provider"), t("scopesGranted"), t("version"), t("encBackend"), t("created"), t("status"), ""].map((h) => (
                   <th key={h} style={{ textAlign: "left", padding: "6px 10px", color: C.textDim, fontFamily: fonts.mono, fontSize: sz.xs, textTransform: "uppercase", letterSpacing: 1.2, borderBottom: `1px solid ${C.border}`, fontWeight: 400 }}>
                     {h}
                   </th>
@@ -355,26 +358,26 @@ export function GrantsTables({
                     <Tag color={C.textDim}>{g.enc_backend}</Tag>
                   </td>
                   <td style={{ padding: "8px 10px", color: C.textDim, fontSize: sz.sm }}>
-                    {formatDate(g.created_at)}
+                    {formatDate(g.created_at, i18n.language)}
                   </td>
                   <td style={{ padding: "8px 10px" }}>
                     {g.revoked_at ? (
-                      <Tag color={C.danger}>revoked</Tag>
+                      <Tag color={C.danger}>{t("revoked")}</Tag>
                     ) : (
-                      <Tag color={C.success}>active</Tag>
+                      <Tag color={C.success}>{t("active")}</Tag>
                     )}
                   </td>
                   <td style={{ padding: "8px 10px", textAlign: "right" }}>
                     <div style={{ display: "inline-flex", gap: 6 }}>
                       <a
                         href={`#/issuances?user=${encodeURIComponent(g.user_id)}`}
-                        title="View this user's Broker issuances"
+                        title={t("viewBrokerIssuances")}
                         style={grantsCrossLinkStyle}
                       >
-                        Issuances
+                        {t("issuances")}
                       </a>
                       {!g.revoked_at && (
-                        <Btn danger small onClick={() => onRevokeBroker(g)}>Revoke</Btn>
+                        <Btn danger small onClick={() => onRevokeBroker(g)}>{t("revoke")}</Btn>
                       )}
                     </div>
                   </td>
@@ -405,27 +408,23 @@ const grantsCrossLinkStyle: React.CSSProperties = {
 // Revoke confirmation copy — matches DESIGN_v4 §9 Flow F semantics.
 // Honest explanation of cascade scope, not a generic "are you sure?".
 
-function consentRevokeCopy(g: ConsentGrantView, clients: ClientView[], resources: ResourceView[]): string {
+type GrantCopyTranslator = ReturnType<typeof useTranslation>["t"];
+
+function consentRevokeCopy(g: ConsentGrantView, clients: ClientView[], resources: ResourceView[], translate?: GrantCopyTranslator): string {
   const c = clients.find((cl) => cl.id === g.client_id);
   const r = resources.find((rr) => rr.id === g.resource_id);
   const clientLabel = c ? c.name : g.client_id;
   const resourceLabel = r ? r.slug : g.resource_id;
-  return (
-    `Revoke consent for ${clientLabel} to access ${resourceLabel}? ` +
-    `This will block future Mint exchanges and revoke any matching live Mint issuances. ` +
-    `Already-vended Broker tokens are not affected.`
-  );
+  const values = { client: clientLabel, resource: resourceLabel };
+  return translate ? translate("consentRevokeCopy", values) : i18n.t("grants:consentRevokeCopy", values);
 }
 
-function brokerRevokeCopy(g: BrokerGrantView, providers: BrokerProviderView[], user: UserView): string {
+function brokerRevokeCopy(g: BrokerGrantView, providers: BrokerProviderView[], user: UserView, translate?: GrantCopyTranslator): string {
   const p = providers.find((pp) => pp.id === g.broker_provider_id);
   const providerLabel = p ? p.slug : g.broker_provider_id;
   const userLabel = user.email || user.name || user.id;
-  return (
-    `Revoke ${userLabel}'s broker connection to ${providerLabel}? ` +
-    `Future broker exchanges will fail with consent_required. ` +
-    `Already-vended upstream tokens stay live until expiry — Authplane cannot invalidate them at the upstream.`
-  );
+  const values = { user: userLabel, provider: providerLabel };
+  return translate ? translate("brokerRevokeCopy", values) : i18n.t("grants:brokerRevokeCopy", values);
 }
 
 export { consentRevokeCopy, brokerRevokeCopy };

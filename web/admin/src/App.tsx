@@ -3,6 +3,8 @@ import { HashRouter, Routes, Route, NavLink, Navigate } from "react-router-dom";
 import { C, fonts, sz, alpha, applyTheme, applySizeScale, getTheme, getSizeScale } from "./tokens";
 import type { Theme, SizeScale } from "./tokens";
 import { AuthError, getCurrentAccount, logout, onAuthenticationFailure } from "./api";
+import { useTranslation } from "./i18n";
+import LanguageSwitcher from "./components/LanguageSwitcher";
 import Login from "./pages/Login";
 import Overview from "./pages/Overview";
 import Clients from "./pages/Clients";
@@ -143,7 +145,7 @@ const iconPaths: Record<string, ReactNode> = {
 /*  Navigation items                                                   */
 /* ------------------------------------------------------------------ */
 
-interface NavItem { path: string; label: string; icon: string }
+interface NavItem { path: string; labelKey: string; icon: string }
 
 // Sidebar entries — flat list of 11 top-level surfaces post-.
 // Resources / Providers / Grants / Issuances are first-class operator
@@ -151,18 +153,18 @@ interface NavItem { path: string; label: string; icon: string }
 // previous "Vault" entry retired with 's endpoint removals; the
 // concepts moved up to top level.
 const navItems: NavItem[] = [
-  { path: "/", label: "Overview", icon: "grid" },
-  { path: "/clients", label: "Clients", icon: "monitor" },
-  { path: "/users", label: "Users", icon: "users" },
-  { path: "/resources", label: "Resources", icon: "grid" },
-  { path: "/fronting", label: "Fronting", icon: "gitBranch" },
-  { path: "/providers", label: "Providers", icon: "lock" },
-  { path: "/grants", label: "Grants", icon: "clipboardCheck" },
-  { path: "/issuances", label: "Issuances", icon: "coins" },
-  { path: "/tokens", label: "Tokens", icon: "search" },
-  { path: "/signing-keys", label: "Signing Keys", icon: "key" },
-  { path: "/audit", label: "Audit Log", icon: "clipboardCheck" },
-  { path: "/system", label: "System", icon: "settings" },
+  { path: "/", labelKey: "nav.overview", icon: "grid" },
+  { path: "/clients", labelKey: "nav.clients", icon: "monitor" },
+  { path: "/users", labelKey: "nav.users", icon: "users" },
+  { path: "/resources", labelKey: "nav.resources", icon: "grid" },
+  { path: "/fronting", labelKey: "nav.fronting", icon: "gitBranch" },
+  { path: "/providers", labelKey: "nav.providers", icon: "lock" },
+  { path: "/grants", labelKey: "nav.grants", icon: "clipboardCheck" },
+  { path: "/issuances", labelKey: "nav.issuances", icon: "coins" },
+  { path: "/tokens", labelKey: "nav.tokens", icon: "search" },
+  { path: "/signing-keys", labelKey: "nav.signingKeys", icon: "key" },
+  { path: "/audit", labelKey: "nav.audit", icon: "clipboardCheck" },
+  { path: "/system", labelKey: "nav.system", icon: "settings" },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -209,6 +211,7 @@ interface SidebarProps {
 function Sidebar({
   collapsed, onToggle, onLogout, theme, onThemeToggle, sizeScale, onSizeChange,
 }: SidebarProps) {
+  const { t } = useTranslation("common");
   const [hoveredNav, setHoveredNav] = useState<{ path: string; top: number } | null>(null);
   const w = collapsed ? SIDEBAR_NARROW : SIDEBAR_WIDE;
 
@@ -281,12 +284,12 @@ function Sidebar({
                 authplane
               </div>
               <div style={{ fontFamily: fonts.mono, fontSize: 11, color: C.textDim, marginTop: 1 }}>
-                admin console
+                {t("adminConsole")}
               </div>
             </div>
             <button
               onClick={onToggle}
-              title="Collapse sidebar"
+              title={t("collapseSidebar")}
               style={{
                 background: "transparent",
                 border: "none",
@@ -313,7 +316,7 @@ function Sidebar({
       {collapsed && (
         <button
           onClick={onToggle}
-          title="Expand sidebar"
+          title={t("expandSidebar")}
           style={{
             background: "transparent",
             border: "none",
@@ -386,7 +389,7 @@ function Sidebar({
                   transition: "opacity 0.15s ease",
                 }}
               >
-                {item.label}
+                {t(item.labelKey)}
               </span>
             </NavLink>
 
@@ -412,7 +415,7 @@ function Sidebar({
                   boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
                 }}
               >
-                {item.label}
+                {t(item.labelKey)}
               </div>
             )}
           </div>
@@ -435,7 +438,7 @@ function Sidebar({
         {/* Theme toggle */}
         <button
           onClick={onThemeToggle}
-          title={theme === "dark" ? "Switch to light" : "Switch to dark"}
+          title={theme === "dark" ? t("switchToLight") : t("switchToDark")}
           style={{
             background: alpha(C.text, 0x10),
             border: "none",
@@ -455,7 +458,7 @@ function Sidebar({
           {...iconBtnHover}
         >
           <Ico name={theme === "dark" ? "sun" : "moon"} size={16} />
-          {!collapsed && <span>{theme === "dark" ? "Light" : "Dark"}</span>}
+          {!collapsed && <span>{theme === "dark" ? t("light") : t("dark")}</span>}
         </button>
 
         {/* Font size selector */}
@@ -466,7 +469,7 @@ function Sidebar({
               const next = cycle[(cycle.indexOf(sizeScale) + 1) % cycle.length];
               onSizeChange(next);
             }}
-            title={`Text size: ${sizeScale}`}
+            title={t("textSize", { size: sizeScale })}
             style={{
               background: alpha(C.text, 0x10),
               border: "none",
@@ -497,7 +500,7 @@ function Sidebar({
               <button
                 key={s}
                 onClick={() => onSizeChange(s)}
-                title={`${s.charAt(0).toUpperCase() + s.slice(1)} text`}
+                title={t("textSizeLabel", { size: s })}
                 style={{
                   background: sizeScale === s ? C.surface : "transparent",
                   border: "none",
@@ -519,6 +522,10 @@ function Sidebar({
         )}
       </div>
 
+      <div style={{ padding: collapsed ? "10px 8px" : "10px 16px", borderTop: `1px solid ${C.border}` }}>
+        <LanguageSwitcher compact={collapsed} />
+      </div>
+
       {/* ——— Sign out ——— */}
       <div
         style={{
@@ -529,7 +536,7 @@ function Sidebar({
       >
         <button
           onClick={onLogout}
-          title="Sign out"
+          title={t("signOut")}
           style={{
             width: "100%",
             padding: collapsed ? "8px" : "8px 12px",
@@ -555,7 +562,7 @@ function Sidebar({
           )}
         >
           <Ico name="logout" size={16} />
-          {!collapsed && <span>Sign out</span>}
+          {!collapsed && <span>{t("signOut")}</span>}
         </button>
       </div>
     </div>
@@ -628,7 +635,12 @@ function Layout({ children, onLogout, logoutError }: LayoutProps) {
 /*  App                                                                */
 /* ------------------------------------------------------------------ */
 
+function LanguageCorner() {
+  return <div style={{ position: "fixed", top: 16, right: 16, zIndex: 10 }}><LanguageSwitcher /></div>;
+}
+
 export default function App() {
+  const { t } = useTranslation("common");
   const [authed, setAuthed] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
   const [logoutError, setLogoutError] = useState<string | null>(null);
@@ -667,17 +679,17 @@ export default function App() {
       setAuthed(false);
     } catch (err) {
       if (!(err instanceof AuthError)) {
-        setLogoutError(err instanceof Error ? `${err.message} — please try again.` : "Unable to sign out — please try again.");
+        setLogoutError(t("logoutUnable"));
       }
     }
   };
 
   if (checkingSession) {
-    return <div style={{ padding: 28, color: C.textDim, fontFamily: fonts.mono }}>Checking session…</div>;
+    return <><LanguageCorner /><div style={{ padding: 28, color: C.textDim, fontFamily: fonts.mono }}>{t("checkingSession")}</div></>;
   }
 
   if (!authed) {
-    return <Login onLogin={handleLogin} />;
+    return <><LanguageCorner /><Login onLogin={handleLogin} /></>;
   }
 
   return (

@@ -79,10 +79,12 @@ func WriteOAuthErrorWithConsentAndCause(w http.ResponseWriter, status int, errCo
 // WriteErrorPage renders a minimal HTML error page for non-redirectable errors
 // (e.g., invalid client_id or redirect_uri where we must NOT redirect).
 func WriteErrorPage(w http.ResponseWriter, r *http.Request, status int, title, message string) {
+	locale := PageLocaleForRequest(w, r)
 	RenderTemplate(r.Context(), w, status, ErrorPageTmpl, struct {
 		Title   string
 		Message string
-	}{title, message})
+		Locale  PageLocale
+	}{locale.Text(title), locale.Text(message), locale})
 }
 
 // RenderTemplate executes a template into a buffer and writes the result to w.
@@ -110,7 +112,7 @@ func WriteJSON(w http.ResponseWriter, status int, v any) {
 
 // ErrorPageTmpl is the shared error page template.
 var ErrorPageTmpl = template.Must(template.New("error").Parse(`<!DOCTYPE html>
-<html lang="en">
+<html lang="{{.Locale.Code}}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -133,10 +135,13 @@ padding:40px 36px;border:1px solid #e2e8f0;text-align:center}
 h1{font-size:1.35em;font-weight:700;margin-bottom:12px;color:#0f172a;letter-spacing:-0.01em}
 p{color:#475569;font-size:0.92em;line-height:1.6}
 .footer{text-align:center;margin-top:24px;font-size:0.8em;color:#94a3b8}
+.language{text-align:right;margin-bottom:12px;font-size:0.82em}
+.language a{color:#4f46e5;text-decoration:none}
 </style>
 </head>
 <body>
 <div class="wrapper">
+<div class="language"><a href="{{.Locale.SwitchURL}}" lang="{{if eq .Locale.Code "en"}}zh-CN{{else}}en{{end}}">{{.Locale.SwitchLabel}}</a></div>
 <div class="logo">
 <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
 <rect width="40" height="40" rx="10" fill="#4f46e5"/>
@@ -155,7 +160,7 @@ p{color:#475569;font-size:0.92em;line-height:1.6}
 <h1>{{.Title}}</h1>
 <p>{{.Message}}</p>
 </div>
-<div class="footer">Secured by Authplane</div>
+<div class="footer">{{.Locale.Text "Secured by Authplane"}}</div>
 </div>
 </body>
 </html>`))

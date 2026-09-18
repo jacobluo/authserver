@@ -17,18 +17,20 @@ import Modal from "../components/Modal";
 import Label from "../components/Label";
 import UserGrantsSection from "./users/UserGrantsSection";
 import UserIssuancesSection from "./users/UserIssuancesSection";
+import { useTranslation } from "../i18n";
 
 function truncate(id: string): string {
   return id.length > 8 ? id.substring(0, 8) + "…" : id;
 }
 
-function formatDate(iso: string): string {
+function formatDate(iso: string, locale: string): string {
   if (!iso) return "\u2014";
   const d = new Date(iso);
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return d.toLocaleDateString(locale, { month: "short", day: "numeric", year: "numeric" });
 }
 
 export default function Users() {
+  const { t, i18n } = useTranslation("users");
   const [users, setUsers] = useState<UserView[]>([]);
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<UserView | null>(null);
@@ -50,9 +52,9 @@ export default function Users() {
       setUsers(data);
       setError("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load users");
+      setError(err instanceof Error ? err.message : t("loadFailed"));
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     loadUsers();
@@ -67,22 +69,22 @@ export default function Users() {
   const handleDisable = async (id: string) => {
     try {
       await disableUser(id);
-      showToast("User disabled");
+      showToast(t("userDisabled"));
       setSelected(null);
       loadUsers();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed");
+      showToast(err instanceof Error ? err.message : t("failed"));
     }
   };
 
   const handleEnable = async (id: string) => {
     try {
       await enableUser(id);
-      showToast("User enabled");
+      showToast(t("userEnabled"));
       setSelected(null);
       loadUsers();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed");
+      showToast(err instanceof Error ? err.message : t("failed"));
     }
   };
 
@@ -99,7 +101,7 @@ export default function Users() {
 
     const email = createForm.email.trim();
     if (!email || !createForm.password) {
-      setCreateError("Email and password are required.");
+      setCreateError(t("emailPasswordRequired"));
       return;
     }
 
@@ -114,10 +116,10 @@ export default function Users() {
       });
       setShowCreate(false);
       setCreateForm({ email: "", name: "", password: "" });
-      showToast("User created");
+      showToast(t("userCreated"));
       await loadUsers();
     } catch (err) {
-      setCreateError(err instanceof Error ? err.message : "Failed to create user");
+      setCreateError(err instanceof Error ? err.message : t("createFailed"));
     } finally {
       setCreating(false);
     }
@@ -126,11 +128,11 @@ export default function Users() {
   return (
     <div style={{ padding: 28 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, marginBottom: 4 }}>
-        <div style={{ fontFamily: fonts.mono, fontSize: sz.xl, fontWeight: 600 }}>Users</div>
-        <Btn onClick={() => setShowCreate(true)}>Create User</Btn>
+        <div style={{ fontFamily: fonts.mono, fontSize: sz.xl, fontWeight: 600 }}>{t("title")}</div>
+        <Btn onClick={() => setShowCreate(true)}>{t("createUser")}</Btn>
       </div>
       <div style={{ fontSize: sz.base, color: C.textDim, marginBottom: 14 }}>
-        {users.length} registered users
+        {t("registeredUsers", { total: users.length })}
       </div>
 
       {error && (
@@ -140,14 +142,14 @@ export default function Users() {
       )}
 
       <div style={{ marginBottom: 14 }}>
-        <TextInput placeholder="Search by name, email, or ID…" value={search} onChange={setSearch} style={{ width: 300 }} />
+        <TextInput placeholder={t("searchPlaceholder")} value={search} onChange={setSearch} style={{ width: 300 }} />
       </div>
 
       <Card style={{ padding: 0 }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: sz.base }}>
           <thead>
             <tr>
-              {["ID", "Name / Email", "Auth", "Role", "Status", "Created"].map((h) => (
+              {[t("id"), t("nameEmail"), t("auth"), t("role"), t("status"), t("created")].map((h) => (
                 <th key={h} style={{ textAlign: "left", padding: "8px 12px", color: C.textDim, fontFamily: fonts.mono, fontSize: sz.xs, textTransform: "uppercase", letterSpacing: 1.2, borderBottom: `1px solid ${C.border}`, fontWeight: 400 }}>
                   {h}
                 </th>
@@ -170,18 +172,18 @@ export default function Users() {
                 </td>
                 <td style={{ padding: "10px 12px" }}>
                   <Tag color={u.provider !== "local" && u.provider !== "" && u.provider !== "\u2014" ? C.blue : C.textDim}>
-                    {u.provider !== "local" && u.provider !== "" && u.provider !== "\u2014" ? "oidc" : "local"}
+                    {u.provider !== "local" && u.provider !== "" && u.provider !== "\u2014" ? t("oidc") : t("local")}
                   </Tag>
                 </td>
                 <td style={{ padding: "10px 12px" }}>
-                  <Tag color={u.role === "admin" ? C.accent : C.textDim}>{u.role}</Tag>
+                  <Tag color={u.role === "admin" ? C.accent : C.textDim}>{t(`roleValue.${u.role}`, { defaultValue: u.role })}</Tag>
                 </td>
                 <td style={{ padding: "10px 12px" }}>
                   <StatusDot status={u.status} />
-                  <span style={{ fontSize: sz.base, color: C.textDim }}>{u.status}</span>
+                  <span style={{ fontSize: sz.base, color: C.textDim }}>{t(`statusValue.${u.status}`, { defaultValue: u.status })}</span>
                 </td>
                 <td style={{ padding: "10px 12px" }}>
-                  <span style={{ fontSize: sz.base, color: C.textDim }}>{formatDate(u.created_at)}</span>
+                  <span style={{ fontSize: sz.base, color: C.textDim }}>{formatDate(u.created_at, i18n.language)}</span>
                 </td>
               </tr>
             ))}
@@ -189,32 +191,32 @@ export default function Users() {
         </table>
         {filtered.length === 0 && (
           <div style={{ padding: "20px 12px", fontSize: sz.base, color: C.textDim, textAlign: "center" }}>
-            {users.length === 0 ? "No users registered." : "No users match your search."}
+            {users.length === 0 ? t("noUsers") : t("noSearchResults")}
           </div>
         )}
       </Card>
 
       {selected && (
-        <Drawer title="User Detail" subtitle={selected.name || selected.email} onClose={() => setSelected(null)} width={620}>
-          <DrawerRow label="user_id" value={<Mono style={{ fontSize: sz.sm }}>{selected.id}</Mono>} />
-          <DrawerRow label="name" value={selected.name || "\u2014"} />
-          <DrawerRow label="email" value={selected.email} />
-          <DrawerRow label="role" value={<Tag color={selected.role === "admin" ? C.accent : C.textDim}>{selected.role}</Tag>} />
-          <DrawerRow label="status" value={<><StatusDot status={selected.status} />{selected.status}</>} />
-          <DrawerRow label="provider" value={
+        <Drawer title={t("userDetail")} subtitle={selected.name || selected.email} onClose={() => setSelected(null)} width={620}>
+          <DrawerRow label={t("userId")} value={<Mono style={{ fontSize: sz.sm }}>{selected.id}</Mono>} />
+          <DrawerRow label={t("name")} value={selected.name || "\u2014"} />
+          <DrawerRow label={t("email")} value={selected.email} />
+          <DrawerRow label={t("role")} value={<Tag color={selected.role === "admin" ? C.accent : C.textDim}>{t(`roleValue.${selected.role}`, { defaultValue: selected.role })}</Tag>} />
+          <DrawerRow label={t("status")} value={<><StatusDot status={selected.status} />{t(`statusValue.${selected.status}`, { defaultValue: selected.status })}</>} />
+          <DrawerRow label={t("provider")} value={
             <Tag color={selected.provider !== "local" && selected.provider !== "" ? C.blue : C.textDim}>
-              {selected.provider || "local"}
+              {selected.provider === "local" || !selected.provider ? t("local") : selected.provider}
             </Tag>
           } />
-          <DrawerRow label="created" value={formatDate(selected.created_at)} />
+          <DrawerRow label={t("created")} value={formatDate(selected.created_at, i18n.language)} />
 
           <div style={{ marginTop: 20 }}>
-            <SectionTitle>Actions</SectionTitle>
+            <SectionTitle>{t("actions")}</SectionTitle>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {selected.status === "active" ? (
-                <Btn secondary small full onClick={() => handleDisable(selected.id)}>Disable User</Btn>
+                <Btn secondary small full onClick={() => handleDisable(selected.id)}>{t("disableUser")}</Btn>
               ) : (
-                <Btn secondary small full onClick={() => handleEnable(selected.id)}>Enable User</Btn>
+                <Btn secondary small full onClick={() => handleEnable(selected.id)}>{t("enableUser")}</Btn>
               )}
             </div>
           </div>
@@ -225,27 +227,27 @@ export default function Users() {
       )}
 
       {showCreate && (
-        <Modal title="Create User" titleColor={C.accent} onClose={closeCreate}>
+        <Modal title={t("createUser")} titleColor={C.accent} onClose={closeCreate}>
           <form onSubmit={handleCreate}>
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               <label>
-                <Label>Email *</Label>
-                <TextInput type="email" placeholder="user@example.com" value={createForm.email} onChange={(email) => setCreateForm((form) => ({ ...form, email }))} />
+                <Label>{t("emailRequired")}</Label>
+                <TextInput type="email" placeholder={t("emailPlaceholder")} value={createForm.email} onChange={(email) => setCreateForm((form) => ({ ...form, email }))} />
               </label>
               <label>
-                <Label>Name</Label>
-                <TextInput placeholder="Display name (optional)" value={createForm.name} onChange={(name) => setCreateForm((form) => ({ ...form, name }))} />
+                <Label>{t("name")}</Label>
+                <TextInput placeholder={t("displayNamePlaceholder")} value={createForm.name} onChange={(name) => setCreateForm((form) => ({ ...form, name }))} />
               </label>
               <label>
-                <Label>Password *</Label>
-                <TextInput type="password" placeholder="Initial password" value={createForm.password} onChange={(password) => setCreateForm((form) => ({ ...form, password }))} />
+                <Label>{t("passwordRequired")}</Label>
+                <TextInput type="password" placeholder={t("initialPasswordPlaceholder")} value={createForm.password} onChange={(password) => setCreateForm((form) => ({ ...form, password }))} />
               </label>
-              <div style={{ fontSize: sz.sm, color: C.textDim }}>Role: user</div>
+              <div style={{ fontSize: sz.sm, color: C.textDim }}>{t("defaultRole")}</div>
               {createError && <div role="alert" style={{ fontSize: sz.sm, color: C.danger }}>{createError}</div>}
             </div>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 24 }}>
-              <Btn secondary onClick={closeCreate} disabled={creating}>Cancel</Btn>
-              <Btn type="submit" disabled={creating}>{creating ? "Creating..." : "Create User"}</Btn>
+              <Btn secondary onClick={closeCreate} disabled={creating}>{t("cancel")}</Btn>
+              <Btn type="submit" disabled={creating}>{creating ? t("creating") : t("createUser")}</Btn>
             </div>
           </form>
         </Modal>

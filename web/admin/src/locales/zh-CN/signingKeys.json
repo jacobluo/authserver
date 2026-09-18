@@ -1,0 +1,10 @@
+{
+  "title": "签名密钥", "subtitle": "JWT 签名密钥管理", "loadFailed": "加载失败", "fetchFailed": "获取 JWKS 端点失败",
+  "keyStore": "密钥存储", "testing": "测试中…", "testJwks": "测试 JWKS", "currentKey": "当前密钥", "algorithm": "算法", "status": "状态",
+  "jwksResponse": "JWKS 响应", "close": "关闭", "jwksSettings": "JWKS 设置", "agentListing": "在 JWKS 中列出智能体",
+  "listingEnabled": "已启用 — JWKS 包含 agents 数组", "listingDisabled": "已禁用 — JWKS 仅公开签名密钥",
+  "listingDescriptionBefore": "启用后，JWKS 将包含", "listingDescriptionAfter": "数组，列出所有已注册的智能体客户端。仅当 MCP 服务器需要通过 JWKS 验证智能体身份时启用。",
+  "agentsEnabled": "智能体功能已启用。", "agentsVisible": "智能体客户端会显示在 JWKS 中。", "agentsHidden": "JWKS 列表已关闭 — 智能体不会公开在 JWKS 中。",
+  "readOnlyNotice": "此设置在界面中为只读 — 请通过服务器 YAML 配置。",
+  "statusValue": { "unknown": "未知", "healthy": "健康", "degraded": "降级", "unhealthy": "异常" }
+}

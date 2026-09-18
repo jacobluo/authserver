@@ -1,0 +1,11 @@
+{
+  "title": "Grants", "subtitle": "Per-user authorization — consent grants (Mint exchange) and broker grants (upstream credential brokering).",
+  "directoryLoadFailed": "Failed to load directory", "grantsLoadFailed": "Failed to load grants", "consentRevoked": "Consent grant revoked", "brokerRevoked": "Broker grant revoked", "revokeFailed": "Failed to revoke",
+  "searchUsers": "Search users…", "noUsers": "No users.", "selectUser": "Select a user to see their grants.", "loading": "Loading…",
+  "consent": "consent", "broker": "broker", "revokeTitle": "Revoke {{kind}} grant?", "cancel": "Cancel", "revoke": "Revoke",
+  "consentRevokeCopy": "Revoke consent for {{client}} to access {{resource}}? This will block future Mint exchanges and revoke any matching live Mint issuances. Already-vended Broker tokens are not affected.",
+  "brokerRevokeCopy": "Revoke {{user}}'s broker connection to {{provider}}? Future broker exchanges will fail with consent_required. Already-vended upstream tokens stay live until expiry — Authplane cannot invalidate them at the upstream.",
+  "consentGrants": "Consent Grants ({{count}})", "noConsentGrants": "No consent grants.", "brokerGrants": "Broker Grants ({{count}})", "noBrokerGrants": "No broker grants.",
+  "agent": "Agent", "resource": "Resource", "scopes": "Scopes", "created": "Created", "status": "Status", "provider": "Provider", "scopesGranted": "Scopes Granted", "version": "Version", "encBackend": "Enc Backend",
+  "revoked": "revoked", "active": "active", "issuances": "Issuances", "viewConsentIssuances": "View issuances for this (user, client, resource) tuple", "viewBrokerIssuances": "View this user's Broker issuances"
+}

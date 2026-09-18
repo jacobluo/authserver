@@ -32,6 +32,7 @@ import Toast from "../components/Toast";
 import SectionTitle from "../components/SectionTitle";
 import AgentChain from "../components/AgentChain";
 import JsonView from "../components/JsonView";
+import { useTranslation } from "../i18n";
 
 // readHashQuery parses ?key=value pairs from the current HashRouter URL
 // (e.g. "#/issuances?user=alice&resource=github"). Returned object is
@@ -53,19 +54,19 @@ interface SinceOption {
 }
 
 const SINCE_OPTIONS: SinceOption[] = [
-  { label: "Last 24h", hours: 24 },
-  { label: "Last 7d", hours: 24 * 7 },
-  { label: "Last 30d", hours: 24 * 30 },
+  { label: "last24h", hours: 24 },
+  { label: "last7d", hours: 24 * 7 },
+  { label: "last30d", hours: 24 * 30 },
 ];
 
 function truncate(s: string, n = 12): string {
   return s.length > n ? s.substring(0, n) + "…" : s;
 }
 
-function formatDateTime(iso: string | undefined): string {
+function formatDateTime(iso: string | undefined, locale: string): string {
   if (!iso) return "—";
   const d = new Date(iso);
-  return d.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleString(locale, { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
 function backendColor(k: BackendKind): string {
@@ -126,6 +127,7 @@ function statusColor(s: "active" | "revoked" | "expired"): string {
 }
 
 export default function Issuances() {
+  const { t, i18n } = useTranslation("issuances");
   const [users, setUsers] = useState<UserView[]>([]);
   const [clients, setClients] = useState<ClientView[]>([]);
   const [resources, setResources] = useState<ResourceView[]>([]);
@@ -161,9 +163,9 @@ export default function Issuances() {
       setResources(rs);
       setError("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load directory");
+      setError(err instanceof Error ? err.message : t("directoryLoadFailed"));
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => { loadDirectory(); }, [loadDirectory]);
 
@@ -201,11 +203,11 @@ export default function Issuances() {
       }
       setResponse(res);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Search failed", "error");
+      showToast(err instanceof Error ? err.message : t("searchFailed"), "error");
     } finally {
       setSearching(false);
     }
-  }, [sinceISO]);
+  }, [sinceISO, t]);
 
   // applyHashCrossLink reads ?user=/?client=/?resource=/?jti= from the
   // current hash, pushes them into the filter state, kicks off a search,
@@ -264,7 +266,7 @@ export default function Issuances() {
 
   const search = async () => {
     if (activeFilterCount === 0) {
-      showToast("Pick at least one filter (user, client, resource, or JTI)", "error");
+      showToast(t("filterRequired"), "error");
       return;
     }
     await runSearch({ user: userValue, client: clientValue, resource: resourceValue, jti: jtiValue.trim() });
@@ -274,7 +276,7 @@ export default function Issuances() {
     setRevoking(true);
     try {
       await revokeIssuance(i.id);
-      showToast("Issuance revoked");
+      showToast(t("revokedToast"));
       setConfirmingRevoke(null);
       setSelected(null);
       // Re-run the current search so the row updates inline.
@@ -282,7 +284,7 @@ export default function Issuances() {
         runSearch({ user: userValue, client: clientValue, resource: resourceValue, jti: jtiValue.trim() });
       }
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to revoke", "error");
+      showToast(err instanceof Error ? err.message : t("revokeFailed"), "error");
     } finally {
       setRevoking(false);
     }
@@ -304,9 +306,9 @@ export default function Issuances() {
   return (
     <div style={{ padding: 28 }}>
       <div style={{ marginBottom: 20 }}>
-        <div style={{ fontFamily: fonts.mono, fontSize: sz.xl, fontWeight: 600 }}>Issuances</div>
+        <div style={{ fontFamily: fonts.mono, fontSize: sz.xl, fontWeight: 600 }}>{t("title")}</div>
         <div style={{ fontSize: sz.base, color: C.textDim, marginTop: 2 }}>
-          Forensic record of every token Authplane has minted or brokered. Combine user / client / resource / JTI filters to narrow the result.
+          {t("subtitle")}
         </div>
       </div>
 
@@ -318,44 +320,44 @@ export default function Issuances() {
 
       <Card style={{ marginBottom: 18 }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(180px, 1fr))", gap: 10, marginBottom: 12 }}>
-          <FilterColumn label="User">
+          <FilterColumn label={t("user")}>
             <select
               value={userValue}
               onChange={(e) => setUserValue(e.target.value)}
               style={selectStyle}
             >
-              <option value="">— any —</option>
+              <option value="">{t("any")}</option>
               {users.map((u) => (
                 <option key={u.id} value={u.id}>{u.email || u.name || u.id}</option>
               ))}
             </select>
           </FilterColumn>
-          <FilterColumn label="Client">
+          <FilterColumn label={t("client")}>
             <select
               value={clientValue}
               onChange={(e) => setClientValue(e.target.value)}
               style={selectStyle}
             >
-              <option value="">— any —</option>
+              <option value="">{t("any")}</option>
               {clients.map((c) => (
                 <option key={c.id} value={c.id}>{c.name} ({truncate(c.id, 8)})</option>
               ))}
             </select>
           </FilterColumn>
-          <FilterColumn label="Resource">
+          <FilterColumn label={t("resource")}>
             <select
               value={resourceValue}
               onChange={(e) => setResourceValue(e.target.value)}
               style={selectStyle}
             >
-              <option value="">— any —</option>
+              <option value="">{t("any")}</option>
               {resources.map((r) => (
                 <option key={r.id} value={r.id}>{r.slug}</option>
               ))}
             </select>
           </FilterColumn>
           <FilterColumn label="JTI">
-            <TextInput placeholder="Paste a JTI…" value={jtiValue} onChange={setJtiValue} />
+            <TextInput placeholder={t("jtiPlaceholder")} value={jtiValue} onChange={setJtiValue} />
           </FilterColumn>
         </div>
 
@@ -377,22 +379,22 @@ export default function Issuances() {
                     fontSize: sz.sm,
                   }}
                 >
-                  {opt.label}
+                  {t(opt.label)}
                 </button>
               ))}
             </div>
           )}
           {jtiValue.trim() !== "" && (
             <span style={{ fontSize: sz.sm, color: C.textDim, fontStyle: "italic" }}>
-              since window ignored for JTI lookups
+              {t("sinceIgnored")}
             </span>
           )}
           <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
             {activeFilterCount > 0 && (
-              <Btn secondary onClick={clearFilters} disabled={searching}>Clear</Btn>
+              <Btn secondary onClick={clearFilters} disabled={searching}>{t("clear")}</Btn>
             )}
             <Btn onClick={search} disabled={searching}>
-              {searching ? "Searching…" : `Search${activeFilterCount > 1 ? ` (${activeFilterCount} filters)` : ""}`}
+              {searching ? t("searching") : activeFilterCount > 1 ? t("searchWithFilters", { count: activeFilterCount }) : t("search")}
             </Btn>
           </div>
         </div>
@@ -401,20 +403,20 @@ export default function Issuances() {
       {response && (
         <Card style={{ padding: 0 }}>
           <div style={{ padding: "10px 14px", borderBottom: `1px solid ${C.border}`, fontSize: sz.sm, color: C.textDim, display: "flex", justifyContent: "space-between" }}>
-            <span>{response.count} issuance{response.count === 1 ? "" : "s"}</span>
+            <span>{t("resultCount", { count: response.count })}</span>
             {jtiValue.trim() === "" && response.since && new Date(response.since).getTime() > 0 && (
-              <span>since {formatDateTime(response.since)}</span>
+              <span>{t("since", { date: formatDateTime(response.since, i18n.language) })}</span>
             )}
           </div>
           {response.issuances.length === 0 ? (
             <div style={{ padding: "20px 14px", fontSize: sz.base, color: C.textDim, textAlign: "center" }}>
-              {jtiValue.trim() !== "" ? "No issuance with that JTI." : "No issuances match the current filters."}
+              {jtiValue.trim() !== "" ? t("noJtiMatch") : t("noMatches")}
             </div>
           ) : (
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: sz.base }}>
               <thead>
                 <tr>
-                  {["JTI", "User", "Client", "Resource", "Backend", "Issued", "Status", ""].map((h) => (
+                  {["JTI", t("user"), t("client"), t("resource"), t("backend"), t("issued"), t("status"), ""].map((h) => (
                     <th key={h} style={{ textAlign: "left", padding: "8px 12px", color: C.textDim, fontFamily: fonts.mono, fontSize: sz.xs, textTransform: "uppercase", letterSpacing: 1.2, borderBottom: `1px solid ${C.border}`, fontWeight: 400 }}>
                       {h}
                     </th>
@@ -445,18 +447,18 @@ export default function Issuances() {
                         <Mono style={{ fontSize: sz.sm }}>{resourceLabel(i.resource_id)}</Mono>
                       </td>
                       <td style={{ padding: "8px 12px" }}>
-                        <Tag color={backendColor(i.backend_kind)}>{i.backend_kind}</Tag>
+                        <Tag color={backendColor(i.backend_kind)}>{t(`backendValue.${i.backend_kind}`)}</Tag>
                       </td>
                       <td style={{ padding: "8px 12px", color: C.textDim, fontSize: sz.sm }}>
-                        {formatDateTime(i.issued_at)}
+                        {formatDateTime(i.issued_at, i18n.language)}
                       </td>
                       <td style={{ padding: "8px 12px" }}>
-                        <Tag color={statusColor(s)}>{s}</Tag>
+                        <Tag color={statusColor(s)}>{t(`statusValue.${s}`)}</Tag>
                       </td>
                       <td style={{ padding: "8px 12px", textAlign: "right" }}>
                         {s === "active" && i.revocable && (
                           <div onClick={(e) => e.stopPropagation()}>
-                            <Btn danger small onClick={() => setConfirmingRevoke(i)}>Revoke</Btn>
+                            <Btn danger small onClick={() => setConfirmingRevoke(i)}>{t("revoke")}</Btn>
                           </div>
                         )}
                       </td>
@@ -471,7 +473,7 @@ export default function Issuances() {
 
       {selected && (
         <Drawer
-          title="Issuance Detail"
+          title={t("detailTitle")}
           subtitle={selected.jti ? truncate(selected.jti, 22) : truncate(selected.id, 22)}
           onClose={() => setSelected(null)}
           width={520}
@@ -480,41 +482,41 @@ export default function Issuances() {
           <DrawerRow label="jti" value={
             selected.jti
               ? <Mono style={{ fontSize: sz.sm }}>{selected.jti}</Mono>
-              : <span style={{ color: C.textDim, fontStyle: "italic" }}>(broker — no JTI)</span>
+              : <span style={{ color: C.textDim, fontStyle: "italic" }}>{t("brokerNoJti")}</span>
           } />
           <DrawerRow label="subject_user" value={
             <CrossLinkValue
               label={userLabel(selected.subject_user_id)}
               href={`#/issuances?user=${encodeURIComponent(selected.subject_user_id)}`}
-              title="Filter issuances by this user"
+              title={t("filterByUser")}
             />
           } />
-          <DrawerRow label="client" value={
+          <DrawerRow label={t("client")} value={
             <CrossLinkValue
               label={clientLabel(selected.client_id)}
               href={`#/issuances?client=${encodeURIComponent(selected.client_id)}`}
-              title="Filter issuances by this client"
+              title={t("filterByClient")}
             />
           } />
-          <DrawerRow label="resource" value={
+          <DrawerRow label={t("resource")} value={
             <CrossLinkValue
               label={resourceLabel(selected.resource_id)}
               href={`#/issuances?resource=${encodeURIComponent(selected.resource_id)}`}
-              title="Filter issuances by this resource"
+              title={t("filterByResource")}
             />
           } />
-          <DrawerRow label="backend" value={<Tag color={backendColor(selected.backend_kind)}>{selected.backend_kind}</Tag>} />
-          <DrawerRow label="scopes" value={
+          <DrawerRow label={t("backend")} value={<Tag color={backendColor(selected.backend_kind)}>{t(`backendValue.${selected.backend_kind}`)}</Tag>} />
+          <DrawerRow label={t("scopes")} value={
             <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
               {selected.scopes.length === 0
                 ? <span style={{ color: C.textDim }}>—</span>
                 : selected.scopes.map((s) => <Tag key={s} color={C.blue}>{s}</Tag>)}
             </div>
           } />
-          <DrawerRow label="revocable" value={selected.revocable ? "yes" : "no"} />
-          <DrawerRow label="issued_at" value={formatDateTime(selected.issued_at)} />
-          <DrawerRow label="expires_at" value={formatDateTime(selected.expires_at)} />
-          <DrawerRow label="revoked_at" value={selected.revoked_at ? formatDateTime(selected.revoked_at) : "—"} />
+          <DrawerRow label={t("revocable")} value={selected.revocable ? t("yes") : t("no")} />
+          <DrawerRow label={t("issuedAt")} value={formatDateTime(selected.issued_at, i18n.language)} />
+          <DrawerRow label={t("expiresAt")} value={formatDateTime(selected.expires_at, i18n.language)} />
+          <DrawerRow label={t("revokedAt")} value={selected.revoked_at ? formatDateTime(selected.revoked_at, i18n.language) : "—"} />
           <DrawerRow label="dpop_jkt" value={
             selected.dpop_jkt
               ? <Mono style={{ fontSize: sz.sm }}>{truncate(selected.dpop_jkt, 24)}</Mono>
@@ -528,7 +530,7 @@ export default function Issuances() {
 
           {selected.agent_chain.length > 0 && (
             <div style={{ marginTop: 16 }}>
-              <SectionTitle>Agent Chain</SectionTitle>
+              <SectionTitle>{t("agentChain")}</SectionTitle>
               <AgentChain chain={selected.agent_chain} />
             </div>
           )}
@@ -545,13 +547,13 @@ export default function Issuances() {
           */}
 
           <div style={{ marginTop: 18 }}>
-            <SectionTitle>Raw record</SectionTitle>
+            <SectionTitle>{t("rawRecord")}</SectionTitle>
             <JsonView value={selected} />
           </div>
 
           {statusOf(selected) === "active" && selected.revocable && (
             <div style={{ marginTop: 18, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
-              <Btn danger full onClick={() => setConfirmingRevoke(selected)}>Revoke Issuance</Btn>
+              <Btn danger full onClick={() => setConfirmingRevoke(selected)}>{t("revokeIssuance")}</Btn>
             </div>
           )}
         </Drawer>
@@ -559,18 +561,17 @@ export default function Issuances() {
 
       {confirmingRevoke && (
         <Modal
-          title="Revoke issuance?"
+          title={t("revokeTitle")}
           titleColor={C.danger}
           onClose={() => setConfirmingRevoke(null)}
         >
           <div style={{ fontSize: sz.base, color: C.textDim, lineHeight: 1.7, marginBottom: 16 }}>
-            Revoke this issuance (jti=<Mono>{confirmingRevoke.jti ? truncate(confirmingRevoke.jti, 18) : "—"}</Mono>)?
-            {" "}Mint tokens become inactive at next introspection; Broker tokens keep working at the upstream until they expire.
+            {t("revokeDescriptionBefore")} <Mono>{confirmingRevoke.jti ? truncate(confirmingRevoke.jti, 18) : "—"}</Mono>{t("revokeDescriptionAfter")}
           </div>
           <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-            <Btn secondary small onClick={() => setConfirmingRevoke(null)}>Cancel</Btn>
+            <Btn secondary small onClick={() => setConfirmingRevoke(null)}>{t("cancel")}</Btn>
             <Btn danger small disabled={revoking} onClick={() => performRevoke(confirmingRevoke)}>
-              {revoking ? "Revoking…" : "Revoke"}
+              {revoking ? t("revoking") : t("revoke")}
             </Btn>
           </div>
         </Modal>

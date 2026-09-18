@@ -1,6 +1,9 @@
 package oauth
 
-import "github.com/authplane/authserver/internal/ports/input"
+import (
+	"github.com/authplane/authserver/api/shared"
+	"github.com/authplane/authserver/internal/ports/input"
+)
 
 // tokenResponseDTO is the JSON structure for POST /oauth/token responses.
 type tokenResponseDTO struct {
@@ -27,6 +30,7 @@ type tokenExchangeResponseDTO struct {
 // header ( / DESIGN_v4 §7). ResourceSlug is rendered as the
 // audit-friendly identifier in the resource pill below the header.
 type consentPageData struct {
+	Locale              shared.PageLocale
 	SessionID           string
 	ClientName          string
 	ClientID            string
@@ -48,6 +52,7 @@ type consentPageData struct {
 
 // loginPageData holds the template data for the login page.
 type loginPageData struct {
+	Locale          shared.PageLocale
 	Error           string
 	Redirect        string
 	CSRFToken       string
@@ -59,6 +64,7 @@ type loginPageData struct {
 
 // oidcErrorData holds the template data for the OIDC error page.
 type oidcErrorData struct {
+	Locale   shared.PageLocale
 	Error    string
 	LoginURL string
 }
