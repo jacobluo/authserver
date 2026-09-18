@@ -38,6 +38,7 @@ var httpRouteSrcDirs = []string{
 // (`feedback_openapi_not_ground_truth`).
 var httpDTOSrcFiles = []string{
 	"api/admin/dto.go",
+	"api/admin/admin_login.go",
 	"api/public/oauth/dto.go",
 	"api/public/wellknown/dto.go",
 	"api/shared/errors.go",
@@ -101,7 +102,7 @@ type httpRoute struct {
 	Method   string // GET, POST, ...
 	Path     string // "/admin/clients"
 	Server   string // "public" | "admin"
-	AuthMode string // "admin-api-key", "session", "none"
+	AuthMode string // "admin-dual", "admin-session", "session", "none", "metrics-basic-auth"
 	Pos      token.Pos
 }
 
@@ -295,19 +296,20 @@ func splitMethodPath(pattern string) (string, string) {
 	return "", ""
 }
 
-// authForCall is a heuristic: returns "admin-api-key" for admin paths
-// (every admin handler is wrapped with authMW.Wrap), "session" if the
+// authForCall describes local admin authentication, or "session" if the
 // surrounding call wraps the handler with a SessionMiddleware-style
 // .Wrap(...), else "none".
 func authForCall(call *ast.CallExpr, path, server string) string {
 	if server == "admin" {
-		// /metrics is wrapped by promhttp BasicAuth not the admin API key.
-		// Keep the heuristic conservative: every other admin path here
-		// is authMW-wrapped (see api/admin/routes.go).
-		if path == "/metrics" {
+		switch path {
+		case "/metrics":
 			return "metrics-basic-auth"
+		case "/admin/auth/login":
+			return "none"
+		case "/admin/auth/me", "/admin/auth/logout":
+			return "admin-session"
 		}
-		return "admin-api-key"
+		return "admin-dual"
 	}
 	// Look at second arg (the handler) — if it's a CallExpr whose Fun
 	// is a SelectorExpr with Sel.Name == "Wrap", the handler is
@@ -566,12 +568,15 @@ func renderHTTPPreamble() string {
 		"RFC-compliant well-known docs, the consent + login UI, and the " +
 		"connect/disconnect surface for broker-vended upstreams.\n" +
 		"- **Admin** (default `:9001`) — provisioning + day-2 operations, " +
-		"protected by `Authorization: Bearer <AUTHPLANE_ADMIN_API_KEY>`. " +
+		"business routes accept `Authorization: Bearer <AUTHPLANE_ADMIN_API_KEY>` or an admin account Cookie. " +
+		"Account login is unauthenticated; account me/logout require the admin Cookie. Cookie writes require `X-Admin-CSRF`. " +
+		"An explicit Authorization header takes priority and never falls back to Cookie authentication. " +
+		"These describe the local server; an injected authentication wrapper defines its own policy and disables local account routes. " +
 		"The `/metrics` endpoint lives on the admin server and is gated by " +
 		"Prometheus basic auth (see [Configuration](./configuration.md)).\n\n" +
 		"All endpoints are documented from their route registration site in " +
 		"`api/public/**` and `api/admin/**`; DTOs come from the Go struct tags " +
-		"in `api/admin/dto.go`, `internal/admin/dto/dto.go`, `api/public/**/dto.go`, " +
+		"in `api/admin/dto.go`, `api/admin/admin_login.go`, `internal/admin/dto/dto.go`, `api/public/**/dto.go`, " +
 		"and `api/shared/errors.go`. Sample shells live in `examples/` and the " +
 		"[CLI reference](./cli.md) covers the matching `authserver admin …` " +
 		"subcommands that round-trip the same wire shapes."
@@ -615,6 +620,14 @@ func renderRouteSection(r httpRoute, src *srcref.SrcRef, repoRootPath string) st
 
 	b.WriteString("**Auth** — ")
 	switch r.AuthMode {
+	case "admin-dual", "admin-session":
+		if r.AuthMode == "admin-dual" {
+			b.WriteString("`Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or ")
+		}
+		b.WriteString("admin account Cookie `authplane_admin_session`")
+		if r.Method != "GET" && r.Method != "HEAD" && r.Method != "OPTIONS" {
+			b.WriteString("; Cookie authentication also requires `X-Admin-CSRF` from login/me")
+		}
 	case "admin-api-key":
 		b.WriteString("`Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`")
 	case "session":
@@ -726,6 +739,9 @@ var routeDescriptions = map[string]string{
 // on different routes, write a note on each and cross-reference by name rather
 // than growing one of them.
 var routeNotes = map[string]string{
+	"POST /admin/auth/login":  "requires JSON `email` and `password`, and an `Origin` matching the admin host and configured scheme. Only existing active local admins may sign in. Sets an HttpOnly, SameSite=Strict Cookie scoped to `/admin`, with an absolute eight-hour expiry; Secure follows `session.secure`. Ordinary OAuth sessions do not grant admin access.",
+	"GET /admin/auth/me":      "returns the current admin identity and CSRF token. An API key alone cannot access this account endpoint.",
+	"POST /admin/auth/logout": "revokes the stored session and clears the Cookie. Requires the admin Cookie and `X-Admin-CSRF`; an API key alone cannot log out an account.",
 	"POST /oauth/register": "this endpoint creates **user-delegated clients**. Their scopes " +
 		"come from the user at consent time, so a `scope` member in the request is " +
 		"**discarded** and the response carries none. **Register machine-to-machine clients " +
@@ -813,6 +829,9 @@ var routeBodyHints = map[string]string{ //nolint:gosec // G101: literal example 
 
 	"GET /admin/audit":         "**Response 200** — JSON array of {{dto:auditEventView}}.\n",
 	"GET /admin/stats":         "**Response 200** — {{dto:statsView}}.\n",
+	"POST /admin/auth/login":   "**Response 200** — {{dto:adminAccountResponse}}.\n",
+	"GET /admin/auth/me":       "**Response 200** — {{dto:adminAccountResponse}}.\n",
+	"POST /admin/auth/logout":  "**Response 204** — empty body.\n",
 	"POST /admin/auth/verify":  "**Response 200** — {{dto:authVerifyResponse}}.\n",
 	"GET /admin/system/status": "**Response 200** — {{dto:systemStatusResponse}}.\n",
 	"GET /admin/system/config": "**Response 200** — {{dto:systemConfigResponse}}.\n",

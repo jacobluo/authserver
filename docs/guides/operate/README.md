@@ -13,12 +13,13 @@ Day-2 operations: clients, users, resources, grants, signing keys, forensic quer
 
 ## Reading order
 
-1. [**Admin CLI**](admin-cli.md) — the operator's daily driver. Every `authserver admin …` subcommand, cross-linked to [`docs/reference/cli.md`](../../reference/cli.md).
-2. [**Admin UI tour**](admin-ui-tour.md) — the visual surface at `:9001/admin/ui/`; page-by-page map to the scripted commands.
-3. [**Key rotation**](key-rotation.md) — signing-key lifecycle, keyfile vs. `postgres_key` vs. Vault Transit, JWKS propagation.
-4. [**Audit & forensics**](audit-and-forensics.md) — query the audit log for incident reconstruction; covers the canonical action names and detail-string format.
-5. [**Token design (operator view)**](token-design-internals.md) — what the AS emits, what to monitor, lifetimes per token kind, refresh-token reuse detection.
-6. [**Incident runbook**](incident-runbook.md) — five named scenarios with Symptoms / Detect / Contain / Eradicate / Recover / Post-incident.
+1. [**Admin account login**](admin-login.md) — bootstrap the first local admin, sign in, understand Cookie/CSRF requirements, and recover access.
+2. [**Admin CLI**](admin-cli.md) — the operator's daily driver. Every `authserver admin …` subcommand, cross-linked to [`docs/reference/cli.md`](../../reference/cli.md).
+3. [**Admin UI tour**](admin-ui-tour.md) — the visual surface at `:9001/admin/ui/`; page-by-page map to the scripted commands.
+4. [**Key rotation**](key-rotation.md) — signing-key lifecycle, keyfile vs. `postgres_key` vs. Vault Transit, JWKS propagation.
+5. [**Audit & forensics**](audit-and-forensics.md) — query the audit log for incident reconstruction; covers the canonical action names and detail-string format.
+6. [**Token design (operator view)**](token-design-internals.md) — what the AS emits, what to monitor, lifetimes per token kind, refresh-token reuse detection.
+7. [**Incident runbook**](incident-runbook.md) — five named scenarios with Symptoms / Detect / Contain / Eradicate / Recover / Post-incident.
 
 ## Conventions
 

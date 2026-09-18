@@ -101,6 +101,14 @@ func (f loginFixture) session(t *testing.T) (*http.Cookie, *input.AdminAccount) 
 func TestAdminAccountLogin_ExplicitAuthorizationNeverFallsBack(t *testing.T) {
 	f := newLoginFixture(t, false, nil)
 	cookie, _ := f.session(t)
+	r := httptest.NewRequest("GET", "http://admin.example.test/admin/users", nil)
+	r.Header["Authorization"] = []string{""}
+	r.AddCookie(cookie)
+	empty := httptest.NewRecorder()
+	f.h.ServeHTTP(empty, r)
+	if empty.Code != http.StatusUnauthorized {
+		t.Fatalf("empty explicit Authorization fell back to Cookie: %d", empty.Code)
+	}
 	for _, auth := range []string{"Bearer wrong", "Basic wrong", "Bearer "} {
 		w := loginRequest(f.h, "GET", "/admin/users", "", "", "", auth, "", cookie)
 		if w.Code != 401 {
@@ -109,6 +117,63 @@ func TestAdminAccountLogin_ExplicitAuthorizationNeverFallsBack(t *testing.T) {
 	}
 	if w := loginRequest(f.h, "GET", "/admin/users", "", "", "", "", "", cookie); w.Code != 200 {
 		t.Fatalf("valid cookie rejected: %d %s", w.Code, w.Body)
+	}
+}
+
+// Catch broken HTTP-to-service wiring, CSRF bypass, or logout that only clears
+// the browser Cookie without revoking its persistent SQLite session.
+func TestAdminAccountJourney(t *testing.T) {
+	stores := testdata.SetupTestStores(t)
+	obs := observability.NewNoop()
+	admin := services.NewAdminService(stores.Client, stores.User, stores.Token, stores.Audit, obs, nil)
+	account, err := admin.CreateUser(context.Background(), input.CreateUserRequest{
+		Email: "operator@example.test", Password: "journey-password", Name: "Operator", Role: "admin",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	login := services.NewAdminLoginService(services.NewUserAuthService(stores.User, obs, nil), stores.User, stores.AdminSession, []byte("journey-csrf-key"))
+	h := mustNewServer(t, config.AdminConfig{APIKey: "test-key"}, admin, obs, apiadmin.OptionalDeps{AdminLogin: login}).Handler()
+	response := loginRequest(h, "POST", "/admin/auth/login", `{"email":"operator@example.test","password":"journey-password"}`, "application/json", "http://admin.example.test", "", "", nil)
+	if response.Code != http.StatusOK {
+		t.Fatalf("login: %d %s", response.Code, response.Body)
+	}
+	var identity struct {
+		ID   string `json:"id"`
+		CSRF string `json:"csrf_token"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &identity); err != nil {
+		t.Fatal(err)
+	}
+	if identity.ID != account.ID || identity.CSRF == "" {
+		t.Fatalf("identity: %s", response.Body)
+	}
+	cookies := response.Result().Cookies()
+	if len(cookies) != 1 {
+		t.Fatalf("cookies: %v", cookies)
+	}
+	cookie := cookies[0]
+	body := `{"email":"created@example.test","password":"created-password","name":"Created"}`
+	denied := loginRequest(h, "POST", "/admin/users", body, "application/json", "", "", "", cookie)
+	if denied.Code != http.StatusForbidden {
+		t.Fatalf("missing CSRF: %d", denied.Code)
+	}
+	write := loginRequest(h, "POST", "/admin/users", body, "application/json", "", "", identity.CSRF, cookie)
+	if write.Code != http.StatusCreated {
+		t.Fatalf("admin write: %d %s", write.Code, write.Body)
+	}
+	created, err := stores.User.GetByEmail(context.Background(), "created@example.test")
+	if err != nil || created == nil || created.Name != "Created" {
+		t.Fatalf("user was not persisted: %v %v", created, err)
+	}
+	logout := loginRequest(h, "POST", "/admin/auth/logout", "", "", "", "", identity.CSRF, cookie)
+	if logout.Code != http.StatusNoContent {
+		t.Fatalf("logout: %d %s", logout.Code, logout.Body)
+	}
+	// Replay the original Cookie, rather than accepting the browser deletion.
+	after := loginRequest(h, "GET", "/admin/users", "", "", "", "", "", cookie)
+	if after.Code != http.StatusUnauthorized {
+		t.Fatalf("logout did not revoke session: %d", after.Code)
 	}
 }
 

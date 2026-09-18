@@ -1025,7 +1025,7 @@ The `authserver` binary exposes the operator surface for the Authplane MCP Autho
 
 > Start the Authplane MCP Authorization Server.
 
-**Source** — `cmd/authserver/serve.go:46`
+**Source** — `cmd/authserver/serve.go:47`
 
 ## `authserver version`
 

@@ -304,8 +304,11 @@ func openAPIDescription(server string) string {
 		"OpenAPI 3.0.3 projection for tooling consumers (Swagger UI, openapi-validator, " +
 		"client codegen, contract testing). Run `make docs-gen` to regenerate."
 	if server == "admin" {
-		return base + "\n\nThe admin server (default `:9001`) requires bearer authentication with " +
-			"`AUTHPLANE_ADMIN_API_KEY`. It carries privileged operations and must never be exposed " +
+		return base + "\n\nThe admin server (default `:9001`) accepts `AUTHPLANE_ADMIN_API_KEY` or an admin account Cookie on business routes. " +
+			"Account login is unauthenticated; me/logout require the admin Cookie. Cookie writes also require `X-Admin-CSRF`. " +
+			"An explicit Authorization header takes priority and never falls back to Cookie authentication. " +
+			"An injected authentication wrapper defines its own policy and disables local account routes. " +
+			"It carries privileged operations and must never be exposed " +
 			"to the public internet."
 	}
 	return base + "\n\nThe public server (default `:9000`) hosts the OAuth 2.1 / OIDC / MCP " +
@@ -319,8 +322,15 @@ func serverSecuritySchemes(server string) map[string]openAPISecurityScheme {
 		return map[string]openAPISecurityScheme{
 			"AdminAPIKey": {
 				Type: "http", Scheme: "bearer",
-				Description: "Bearer auth using `AUTHPLANE_ADMIN_API_KEY`. The admin server has no other " +
-					"auth mode; every protected route requires this header.",
+				Description: "Bearer auth using `AUTHPLANE_ADMIN_API_KEY` for automation and recovery. Takes priority over Cookie authentication.",
+			},
+			"AdminSessionCookie": {
+				Type: "apiKey", In: "cookie", Name: "authplane_admin_session",
+				Description: "Separate admin account session; HttpOnly, SameSite=Strict, Path=/admin, absolute eight-hour expiry. Ordinary OAuth sessions do not grant admin access.",
+			},
+			"AdminCSRF": {
+				Type: "apiKey", In: "header", Name: "X-Admin-CSRF",
+				Description: "CSRF token returned by admin login/me; required together with the admin Cookie for writes.",
 			},
 		}
 	}
@@ -380,6 +390,15 @@ func buildOperation(r httpRoute, dtoByName map[string]httpDTO, refs map[string]b
 
 	// Security per auth mode (matches the Markdown reference's "Auth — …" line).
 	switch r.AuthMode {
+	case "admin-dual", "admin-session":
+		cookie := map[string][]string{"AdminSessionCookie": {}}
+		if r.Method != "GET" && r.Method != "HEAD" && r.Method != "OPTIONS" {
+			cookie["AdminCSRF"] = []string{}
+		}
+		if r.AuthMode == "admin-dual" {
+			op.Security = append(op.Security, map[string][]string{"AdminAPIKey": {}})
+		}
+		op.Security = append(op.Security, cookie)
 	case "admin-api-key":
 		op.Security = []map[string][]string{{"AdminAPIKey": {}}}
 	case "session":

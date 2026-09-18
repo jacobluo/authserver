@@ -6,7 +6,7 @@ info:
   description: |-
     Generated from the authserver handler source by `tools/docsgen`. The human-readable companion reference is `docs/reference/http-api.md`; this YAML is its OpenAPI 3.0.3 projection for tooling consumers (Swagger UI, openapi-validator, client codegen, contract testing). Run `make docs-gen` to regenerate.
 
-    The admin server (default `:9001`) requires bearer authentication with `AUTHPLANE_ADMIN_API_KEY`. It carries privileged operations and must never be exposed to the public internet.
+    The admin server (default `:9001`) accepts `AUTHPLANE_ADMIN_API_KEY` or an admin account Cookie on business routes. Account login is unauthenticated; me/logout require the admin Cookie. Cookie writes also require `X-Admin-CSRF`. An explicit Authorization header takes priority and never falls back to Cookie authentication. An injected authentication wrapper defines its own policy and disables local account routes. It carries privileged operations and must never be exposed to the public internet.
 servers:
   - url: http://localhost:9001
     description: local development (default port)
@@ -29,6 +29,50 @@ paths:
                 $ref: '#/components/schemas/AuditEventView'
       security:
         - AdminAPIKey: []
+        - AdminSessionCookie: []
+  /admin/auth/login:
+    post:
+      operationId: http-admin-auth-login-create
+      summary: '`POST /admin/auth/login`'
+      description: Requires JSON `email` and `password`, and an `Origin` matching the admin host and configured scheme. Only existing active local admins may sign in. Sets an HttpOnly, SameSite=Strict Cookie scoped to `/admin`, with an absolute eight-hour expiry; Secure follows `session.secure`. Ordinary OAuth sessions do not grant admin access.
+      tags:
+        - admin
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAccountResponse'
+  /admin/auth/logout:
+    post:
+      operationId: http-admin-auth-logout-create
+      summary: '`POST /admin/auth/logout`'
+      description: Revokes the stored session and clears the Cookie. Requires the admin Cookie and `X-Admin-CSRF`; an API key alone cannot log out an account.
+      tags:
+        - admin
+      responses:
+        "204":
+          description: No Content
+      security:
+        - AdminCSRF: []
+          AdminSessionCookie: []
+  /admin/auth/me:
+    get:
+      operationId: http-admin-auth-me-list
+      summary: '`GET /admin/auth/me`'
+      description: Returns the current admin identity and CSRF token. An API key alone cannot access this account endpoint.
+      tags:
+        - admin
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAccountResponse'
+      security:
+        - AdminSessionCookie: []
   /admin/auth/verify:
     post:
       operationId: http-admin-auth-verify
@@ -44,6 +88,8 @@ paths:
                 $ref: '#/components/schemas/AuthVerifyResponse'
       security:
         - AdminAPIKey: []
+        - AdminCSRF: []
+          AdminSessionCookie: []
   /admin/broker-providers:
     get:
       operationId: http-admin-broker-providers-list
@@ -59,6 +105,7 @@ paths:
                 $ref: '#/components/schemas/BrokerProviderView'
       security:
         - AdminAPIKey: []
+        - AdminSessionCookie: []
     post:
       operationId: http-admin-broker-providers-create
       summary: '`POST /admin/broker-providers`'
@@ -79,6 +126,8 @@ paths:
                 $ref: '#/components/schemas/BrokerProviderView'
       security:
         - AdminAPIKey: []
+        - AdminCSRF: []
+          AdminSessionCookie: []
   /admin/broker-providers/{id}:
     get:
       operationId: http-admin-broker-providers-id-get
@@ -94,6 +143,7 @@ paths:
                 $ref: '#/components/schemas/BrokerProviderView'
       security:
         - AdminAPIKey: []
+        - AdminSessionCookie: []
     patch:
       operationId: http-admin-broker-providers-id-update
       summary: '`PATCH /admin/broker-providers/{id}`'
@@ -114,6 +164,8 @@ paths:
                 $ref: '#/components/schemas/BrokerProviderView'
       security:
         - AdminAPIKey: []
+        - AdminCSRF: []
+          AdminSessionCookie: []
     delete:
       operationId: http-admin-broker-providers-id-delete
       summary: '`DELETE /admin/broker-providers/{id}`'
@@ -124,6 +176,8 @@ paths:
           description: No Content
       security:
         - AdminAPIKey: []
+        - AdminCSRF: []
+          AdminSessionCookie: []
     parameters:
       - name: id
         in: path
@@ -145,6 +199,7 @@ paths:
                 $ref: '#/components/schemas/ClientView'
       security:
         - AdminAPIKey: []
+        - AdminSessionCookie: []
     post:
       operationId: http-admin-clients-create
       summary: '`POST /admin/clients`'
@@ -171,6 +226,8 @@ paths:
           description: 'Conflict (`error` values: `client_exists`)'
       security:
         - AdminAPIKey: []
+        - AdminCSRF: []
+          AdminSessionCookie: []
   /admin/clients/{id}:
     get:
       operationId: http-admin-clients-id-get
@@ -186,6 +243,7 @@ paths:
                 $ref: '#/components/schemas/ClientView'
       security:
         - AdminAPIKey: []
+        - AdminSessionCookie: []
     patch:
       operationId: http-admin-clients-id-update
       summary: '`PATCH /admin/clients/{id}`'
@@ -206,6 +264,8 @@ paths:
                 $ref: '#/components/schemas/ClientView'
       security:
         - AdminAPIKey: []
+        - AdminCSRF: []
+          AdminSessionCookie: []
     delete:
       operationId: http-admin-clients-id-delete
       summary: '`DELETE /admin/clients/{id}`'
@@ -216,6 +276,8 @@ paths:
           description: No Content
       security:
         - AdminAPIKey: []
+        - AdminCSRF: []
+          AdminSessionCookie: []
     parameters:
       - name: id
         in: path
@@ -237,6 +299,8 @@ paths:
                 $ref: '#/components/schemas/StatusResponse'
       security:
         - AdminAPIKey: []
+        - AdminCSRF: []
+          AdminSessionCookie: []
     parameters:
       - name: id
         in: path
@@ -258,6 +322,8 @@ paths:
                 $ref: '#/components/schemas/StatusResponse'
       security:
         - AdminAPIKey: []
+        - AdminCSRF: []
+          AdminSessionCookie: []
     parameters:
       - name: id
         in: path
@@ -279,6 +345,8 @@ paths:
                 $ref: '#/components/schemas/RotateSecretResponse'
       security:
         - AdminAPIKey: []
+        - AdminCSRF: []
+          AdminSessionCookie: []
     parameters:
       - name: id
         in: path
@@ -300,6 +368,8 @@ paths:
                 $ref: '#/components/schemas/StatusResponse'
       security:
         - AdminAPIKey: []
+        - AdminCSRF: []
+          AdminSessionCookie: []
     parameters:
       - name: id
         in: path
@@ -321,6 +391,7 @@ paths:
                 $ref: '#/components/schemas/FrontingLinkView'
       security:
         - AdminAPIKey: []
+        - AdminSessionCookie: []
     post:
       operationId: http-admin-fronting-create
       summary: '`POST /admin/fronting`'
@@ -341,6 +412,8 @@ paths:
                 $ref: '#/components/schemas/FrontingLinkView'
       security:
         - AdminAPIKey: []
+        - AdminCSRF: []
+          AdminSessionCookie: []
   /admin/fronting/{source}/{target}:
     get:
       operationId: http-admin-fronting-source-target-get
@@ -356,6 +429,7 @@ paths:
                 $ref: '#/components/schemas/FrontingLinkView'
       security:
         - AdminAPIKey: []
+        - AdminSessionCookie: []
     patch:
       operationId: http-admin-fronting-source-target-update
       summary: '`PATCH /admin/fronting/{source}/{target}`'
@@ -376,6 +450,8 @@ paths:
                 $ref: '#/components/schemas/FrontingLinkView'
       security:
         - AdminAPIKey: []
+        - AdminCSRF: []
+          AdminSessionCookie: []
     delete:
       operationId: http-admin-fronting-source-target-delete
       summary: '`DELETE /admin/fronting/{source}/{target}`'
@@ -386,6 +462,8 @@ paths:
           description: No Content
       security:
         - AdminAPIKey: []
+        - AdminCSRF: []
+          AdminSessionCookie: []
     parameters:
       - name: source
         in: path
@@ -408,6 +486,8 @@ paths:
           description: No Content
       security:
         - AdminAPIKey: []
+        - AdminCSRF: []
+          AdminSessionCookie: []
     parameters:
       - name: id
         in: path
@@ -425,6 +505,8 @@ paths:
           description: No Content
       security:
         - AdminAPIKey: []
+        - AdminCSRF: []
+          AdminSessionCookie: []
     parameters:
       - name: id
         in: path
@@ -442,6 +524,7 @@ paths:
           description: See `docs/reference/http-api.md` for the response shape.
       security:
         - AdminAPIKey: []
+        - AdminSessionCookie: []
     post:
       operationId: http-admin-idps-create
       summary: '`POST /admin/idps`'
@@ -452,6 +535,8 @@ paths:
           description: See `docs/reference/http-api.md` for the response shape.
       security:
         - AdminAPIKey: []
+        - AdminCSRF: []
+          AdminSessionCookie: []
   /admin/idps/{id}:
     get:
       operationId: http-admin-idps-id-get
@@ -463,6 +548,7 @@ paths:
           description: See `docs/reference/http-api.md` for the response shape.
       security:
         - AdminAPIKey: []
+        - AdminSessionCookie: []
     put:
       operationId: http-admin-idps-id-update
       summary: '`PUT /admin/idps/{id}`'
@@ -473,6 +559,8 @@ paths:
           description: See `docs/reference/http-api.md` for the response shape.
       security:
         - AdminAPIKey: []
+        - AdminCSRF: []
+          AdminSessionCookie: []
     delete:
       operationId: http-admin-idps-id-delete
       summary: '`DELETE /admin/idps/{id}`'
@@ -483,6 +571,8 @@ paths:
           description: See `docs/reference/http-api.md` for the response shape.
       security:
         - AdminAPIKey: []
+        - AdminCSRF: []
+          AdminSessionCookie: []
     parameters:
       - name: id
         in: path
@@ -500,6 +590,8 @@ paths:
           description: See `docs/reference/http-api.md` for the response shape.
       security:
         - AdminAPIKey: []
+        - AdminCSRF: []
+          AdminSessionCookie: []
     parameters:
       - name: id
         in: path
@@ -521,6 +613,7 @@ paths:
                 $ref: '#/components/schemas/IssuanceListResponse'
       security:
         - AdminAPIKey: []
+        - AdminSessionCookie: []
   /admin/issuances/{id}:
     get:
       operationId: http-admin-issuances-id-get
@@ -536,6 +629,7 @@ paths:
                 $ref: '#/components/schemas/IssuanceView'
       security:
         - AdminAPIKey: []
+        - AdminSessionCookie: []
     delete:
       operationId: http-admin-issuances-id-delete
       summary: '`DELETE /admin/issuances/{id}`'
@@ -546,6 +640,8 @@ paths:
           description: No Content
       security:
         - AdminAPIKey: []
+        - AdminCSRF: []
+          AdminSessionCookie: []
     parameters:
       - name: id
         in: path
@@ -567,6 +663,7 @@ paths:
                 $ref: '#/components/schemas/ListKeysResponse'
       security:
         - AdminAPIKey: []
+        - AdminSessionCookie: []
   /admin/keys/rotate:
     post:
       operationId: http-admin-keys-rotate
@@ -582,6 +679,8 @@ paths:
                 $ref: '#/components/schemas/RotateKeyResponse'
       security:
         - AdminAPIKey: []
+        - AdminCSRF: []
+          AdminSessionCookie: []
   /admin/resources:
     get:
       operationId: http-admin-resources-list
@@ -597,6 +696,7 @@ paths:
                 $ref: '#/components/schemas/ResourceView'
       security:
         - AdminAPIKey: []
+        - AdminSessionCookie: []
     post:
       operationId: http-admin-resources-create
       summary: '`POST /admin/resources`'
@@ -617,6 +717,8 @@ paths:
                 $ref: '#/components/schemas/ResourceView'
       security:
         - AdminAPIKey: []
+        - AdminCSRF: []
+          AdminSessionCookie: []
   /admin/resources/{id}:
     get:
       operationId: http-admin-resources-id-get
@@ -632,6 +734,7 @@ paths:
                 $ref: '#/components/schemas/ResourceView'
       security:
         - AdminAPIKey: []
+        - AdminSessionCookie: []
     patch:
       operationId: http-admin-resources-id-update
       summary: '`PATCH /admin/resources/{id}`'
@@ -652,6 +755,8 @@ paths:
                 $ref: '#/components/schemas/ResourceView'
       security:
         - AdminAPIKey: []
+        - AdminCSRF: []
+          AdminSessionCookie: []
     delete:
       operationId: http-admin-resources-id-delete
       summary: '`DELETE /admin/resources/{id}`'
@@ -666,6 +771,8 @@ paths:
                 $ref: '#/components/schemas/FrontingLinkConflictResponse'
       security:
         - AdminAPIKey: []
+        - AdminCSRF: []
+          AdminSessionCookie: []
     parameters:
       - name: id
         in: path
@@ -687,6 +794,7 @@ paths:
                 $ref: '#/components/schemas/ResourceFrontingView'
       security:
         - AdminAPIKey: []
+        - AdminSessionCookie: []
     parameters:
       - name: slug
         in: path
@@ -704,6 +812,7 @@ paths:
           description: See `docs/reference/http-api.md` for the response shape.
       security:
         - AdminAPIKey: []
+        - AdminSessionCookie: []
     post:
       operationId: http-admin-resources-slug-policy-connect-allowed-return-urls-create
       summary: '`POST /admin/resources/{slug}/policy/connect/allowed-return-urls`'
@@ -714,6 +823,8 @@ paths:
           description: See `docs/reference/http-api.md` for the response shape.
       security:
         - AdminAPIKey: []
+        - AdminCSRF: []
+          AdminSessionCookie: []
     delete:
       operationId: http-admin-resources-slug-policy-connect-allowed-return-urls-delete
       summary: '`DELETE /admin/resources/{slug}/policy/connect/allowed-return-urls`'
@@ -724,6 +835,8 @@ paths:
           description: See `docs/reference/http-api.md` for the response shape.
       security:
         - AdminAPIKey: []
+        - AdminCSRF: []
+          AdminSessionCookie: []
     parameters:
       - name: slug
         in: path
@@ -741,6 +854,7 @@ paths:
           description: See `docs/reference/http-api.md` for the response shape.
       security:
         - AdminAPIKey: []
+        - AdminSessionCookie: []
     post:
       operationId: http-admin-resources-slug-policy-exchange-allowed-clients-create
       summary: '`POST /admin/resources/{slug}/policy/exchange/allowed-clients`'
@@ -751,6 +865,8 @@ paths:
           description: See `docs/reference/http-api.md` for the response shape.
       security:
         - AdminAPIKey: []
+        - AdminCSRF: []
+          AdminSessionCookie: []
     parameters:
       - name: slug
         in: path
@@ -768,6 +884,8 @@ paths:
           description: See `docs/reference/http-api.md` for the response shape.
       security:
         - AdminAPIKey: []
+        - AdminCSRF: []
+          AdminSessionCookie: []
     parameters:
       - name: slug
         in: path
@@ -790,6 +908,7 @@ paths:
           description: See `docs/reference/http-api.md` for the response shape.
       security:
         - AdminAPIKey: []
+        - AdminSessionCookie: []
     post:
       operationId: http-admin-resources-slug-policy-runtime-client-ids-create
       summary: '`POST /admin/resources/{slug}/policy/runtime/client-ids`'
@@ -800,6 +919,8 @@ paths:
           description: See `docs/reference/http-api.md` for the response shape.
       security:
         - AdminAPIKey: []
+        - AdminCSRF: []
+          AdminSessionCookie: []
     parameters:
       - name: slug
         in: path
@@ -817,6 +938,8 @@ paths:
           description: See `docs/reference/http-api.md` for the response shape.
       security:
         - AdminAPIKey: []
+        - AdminCSRF: []
+          AdminSessionCookie: []
     parameters:
       - name: slug
         in: path
@@ -843,6 +966,7 @@ paths:
                 $ref: '#/components/schemas/DcrSettingsView'
       security:
         - AdminAPIKey: []
+        - AdminSessionCookie: []
     patch:
       operationId: http-admin-settings-dcr-update
       summary: '`PATCH /admin/settings/dcr`'
@@ -863,6 +987,8 @@ paths:
                 $ref: '#/components/schemas/DcrSettingsView'
       security:
         - AdminAPIKey: []
+        - AdminCSRF: []
+          AdminSessionCookie: []
   /admin/stats:
     get:
       operationId: http-admin-stats-list
@@ -878,6 +1004,7 @@ paths:
                 $ref: '#/components/schemas/StatsView'
       security:
         - AdminAPIKey: []
+        - AdminSessionCookie: []
   /admin/system/config:
     get:
       operationId: http-admin-system-config-list
@@ -893,6 +1020,7 @@ paths:
                 $ref: '#/components/schemas/SystemConfigResponse'
       security:
         - AdminAPIKey: []
+        - AdminSessionCookie: []
   /admin/system/status:
     get:
       operationId: http-admin-system-status-list
@@ -908,6 +1036,7 @@ paths:
                 $ref: '#/components/schemas/SystemStatusResponse'
       security:
         - AdminAPIKey: []
+        - AdminSessionCookie: []
   /admin/tokens:
     get:
       operationId: http-admin-tokens-list
@@ -919,6 +1048,7 @@ paths:
           description: See `docs/reference/http-api.md` for the response shape.
       security:
         - AdminAPIKey: []
+        - AdminSessionCookie: []
   /admin/tokens/{jti}:
     delete:
       operationId: http-admin-tokens-jti-delete
@@ -930,6 +1060,8 @@ paths:
           description: See `docs/reference/http-api.md` for the response shape.
       security:
         - AdminAPIKey: []
+        - AdminCSRF: []
+          AdminSessionCookie: []
     parameters:
       - name: jti
         in: path
@@ -947,6 +1079,7 @@ paths:
           description: See `docs/reference/http-api.md` for the response shape.
       security:
         - AdminAPIKey: []
+        - AdminSessionCookie: []
   /admin/users:
     get:
       operationId: http-admin-users-list
@@ -962,6 +1095,7 @@ paths:
                 $ref: '#/components/schemas/UserView'
       security:
         - AdminAPIKey: []
+        - AdminSessionCookie: []
     post:
       operationId: http-admin-users-create
       summary: '`POST /admin/users`'
@@ -982,6 +1116,8 @@ paths:
                 $ref: '#/components/schemas/UserView'
       security:
         - AdminAPIKey: []
+        - AdminCSRF: []
+          AdminSessionCookie: []
   /admin/users/{id}:
     get:
       operationId: http-admin-users-id-get
@@ -997,6 +1133,7 @@ paths:
                 $ref: '#/components/schemas/UserView'
       security:
         - AdminAPIKey: []
+        - AdminSessionCookie: []
     patch:
       operationId: http-admin-users-id-update
       summary: '`PATCH /admin/users/{id}`'
@@ -1017,6 +1154,8 @@ paths:
                 $ref: '#/components/schemas/UserView'
       security:
         - AdminAPIKey: []
+        - AdminCSRF: []
+          AdminSessionCookie: []
     delete:
       operationId: http-admin-users-id-delete
       summary: '`DELETE /admin/users/{id}`'
@@ -1027,6 +1166,8 @@ paths:
           description: No Content
       security:
         - AdminAPIKey: []
+        - AdminCSRF: []
+          AdminSessionCookie: []
     parameters:
       - name: id
         in: path
@@ -1048,6 +1189,8 @@ paths:
                 $ref: '#/components/schemas/StatusResponse'
       security:
         - AdminAPIKey: []
+        - AdminCSRF: []
+          AdminSessionCookie: []
     parameters:
       - name: id
         in: path
@@ -1069,6 +1212,8 @@ paths:
                 $ref: '#/components/schemas/StatusResponse'
       security:
         - AdminAPIKey: []
+        - AdminCSRF: []
+          AdminSessionCookie: []
     parameters:
       - name: id
         in: path
@@ -1090,6 +1235,7 @@ paths:
                 $ref: '#/components/schemas/UserGrantsView'
       security:
         - AdminAPIKey: []
+        - AdminSessionCookie: []
     parameters:
       - name: id
         in: path
@@ -1107,6 +1253,7 @@ paths:
           description: OK
       security:
         - AdminAPIKey: []
+        - AdminSessionCookie: []
     delete:
       operationId: http-admin-users-id-tokens-delete
       summary: '`DELETE /admin/users/{id}/tokens`'
@@ -1117,6 +1264,8 @@ paths:
           description: OK
       security:
         - AdminAPIKey: []
+        - AdminCSRF: []
+          AdminSessionCookie: []
     parameters:
       - name: id
         in: path
@@ -1134,6 +1283,7 @@ paths:
           description: See `docs/reference/http-api.md` for the response shape.
       security:
         - AdminAPIKey: []
+        - AdminSessionCookie: []
     post:
       operationId: http-admin-xaa-policies-create
       summary: '`POST /admin/xaa/policies`'
@@ -1144,6 +1294,8 @@ paths:
           description: See `docs/reference/http-api.md` for the response shape.
       security:
         - AdminAPIKey: []
+        - AdminCSRF: []
+          AdminSessionCookie: []
   /admin/xaa/policies/{id}:
     get:
       operationId: http-admin-xaa-policies-id-get
@@ -1155,6 +1307,7 @@ paths:
           description: See `docs/reference/http-api.md` for the response shape.
       security:
         - AdminAPIKey: []
+        - AdminSessionCookie: []
     put:
       operationId: http-admin-xaa-policies-id-update
       summary: '`PUT /admin/xaa/policies/{id}`'
@@ -1165,6 +1318,8 @@ paths:
           description: See `docs/reference/http-api.md` for the response shape.
       security:
         - AdminAPIKey: []
+        - AdminCSRF: []
+          AdminSessionCookie: []
     delete:
       operationId: http-admin-xaa-policies-id-delete
       summary: '`DELETE /admin/xaa/policies/{id}`'
@@ -1175,6 +1330,8 @@ paths:
           description: See `docs/reference/http-api.md` for the response shape.
       security:
         - AdminAPIKey: []
+        - AdminCSRF: []
+          AdminSessionCookie: []
     parameters:
       - name: id
         in: path
@@ -1192,6 +1349,7 @@ paths:
           description: See `docs/reference/http-api.md` for the response shape.
       security:
         - AdminAPIKey: []
+        - AdminSessionCookie: []
     post:
       operationId: http-admin-xaa-subject-mappings-create
       summary: '`POST /admin/xaa/subject-mappings`'
@@ -1202,6 +1360,8 @@ paths:
           description: See `docs/reference/http-api.md` for the response shape.
       security:
         - AdminAPIKey: []
+        - AdminCSRF: []
+          AdminSessionCookie: []
   /admin/xaa/subject-mappings/{id}:
     delete:
       operationId: http-admin-xaa-subject-mappings-id-delete
@@ -1213,6 +1373,8 @@ paths:
           description: See `docs/reference/http-api.md` for the response shape.
       security:
         - AdminAPIKey: []
+        - AdminCSRF: []
+          AdminSessionCookie: []
     parameters:
       - name: id
         in: path
@@ -1231,6 +1393,26 @@ paths:
           description: OK
 components:
   schemas:
+    AdminAccountResponse:
+      type: object
+      properties:
+        csrf_token:
+          type: string
+        email:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        id:
+          type: string
+        name:
+          type: string
+      required:
+        - csrf_token
+        - email
+        - expires_at
+        - id
+        - name
     AgentsConfigView:
       type: object
       properties:
@@ -2181,4 +2363,14 @@ components:
     AdminAPIKey:
       type: http
       scheme: bearer
-      description: Bearer auth using `AUTHPLANE_ADMIN_API_KEY`. The admin server has no other auth mode; every protected route requires this header.
+      description: Bearer auth using `AUTHPLANE_ADMIN_API_KEY` for automation and recovery. Takes priority over Cookie authentication.
+    AdminCSRF:
+      type: apiKey
+      name: X-Admin-CSRF
+      in: header
+      description: CSRF token returned by admin login/me; required together with the admin Cookie for writes.
+    AdminSessionCookie:
+      type: apiKey
+      name: authplane_admin_session
+      in: cookie
+      description: Separate admin account session; HttpOnly, SameSite=Strict, Path=/admin, absolute eight-hour expiry. Ordinary OAuth sessions do not grant admin access.
