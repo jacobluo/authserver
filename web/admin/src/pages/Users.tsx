@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
+import type { FormEvent } from "react";
 import { C, fonts, sz, alpha } from "../tokens";
-import { listUsers, disableUser, enableUser } from "../api";
+import { listUsers, createUser, disableUser, enableUser } from "../api";
 import type { UserView } from "../api";
 import Card from "../components/Card";
 import Btn from "../components/Btn";
@@ -12,6 +13,8 @@ import Drawer from "../components/Drawer";
 import DrawerRow from "../components/DrawerRow";
 import SectionTitle from "../components/SectionTitle";
 import Toast from "../components/Toast";
+import Modal from "../components/Modal";
+import Label from "../components/Label";
 import UserGrantsSection from "./users/UserGrantsSection";
 import UserIssuancesSection from "./users/UserIssuancesSection";
 
@@ -31,6 +34,10 @@ export default function Users() {
   const [selected, setSelected] = useState<UserView | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [showCreate, setShowCreate] = useState(false);
+  const [createForm, setCreateForm] = useState({ email: "", name: "", password: "" });
+  const [createError, setCreateError] = useState("");
+  const [creating, setCreating] = useState(false);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -79,9 +86,49 @@ export default function Users() {
     }
   };
 
+  const closeCreate = () => {
+    if (creating) return;
+    setShowCreate(false);
+    setCreateForm({ email: "", name: "", password: "" });
+    setCreateError("");
+  };
+
+  const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (creating) return;
+
+    const email = createForm.email.trim();
+    if (!email || !createForm.password) {
+      setCreateError("Email and password are required.");
+      return;
+    }
+
+    setCreating(true);
+    setCreateError("");
+    try {
+      await createUser({
+        email,
+        name: createForm.name.trim(),
+        password: createForm.password,
+        role: "user",
+      });
+      setShowCreate(false);
+      setCreateForm({ email: "", name: "", password: "" });
+      showToast("User created");
+      await loadUsers();
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : "Failed to create user");
+    } finally {
+      setCreating(false);
+    }
+  };
+
   return (
     <div style={{ padding: 28 }}>
-      <div style={{ fontFamily: fonts.mono, fontSize: sz.xl, fontWeight: 600, marginBottom: 4 }}>Users</div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, marginBottom: 4 }}>
+        <div style={{ fontFamily: fonts.mono, fontSize: sz.xl, fontWeight: 600 }}>Users</div>
+        <Btn onClick={() => setShowCreate(true)}>Create User</Btn>
+      </div>
       <div style={{ fontSize: sz.base, color: C.textDim, marginBottom: 14 }}>
         {users.length} registered users
       </div>
@@ -175,6 +222,33 @@ export default function Users() {
           <UserGrantsSection user={selected} />
           <UserIssuancesSection user={selected} />
         </Drawer>
+      )}
+
+      {showCreate && (
+        <Modal title="Create User" titleColor={C.accent} onClose={closeCreate}>
+          <form onSubmit={handleCreate}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <label>
+                <Label>Email *</Label>
+                <TextInput type="email" placeholder="user@example.com" value={createForm.email} onChange={(email) => setCreateForm((form) => ({ ...form, email }))} />
+              </label>
+              <label>
+                <Label>Name</Label>
+                <TextInput placeholder="Display name (optional)" value={createForm.name} onChange={(name) => setCreateForm((form) => ({ ...form, name }))} />
+              </label>
+              <label>
+                <Label>Password *</Label>
+                <TextInput type="password" placeholder="Initial password" value={createForm.password} onChange={(password) => setCreateForm((form) => ({ ...form, password }))} />
+              </label>
+              <div style={{ fontSize: sz.sm, color: C.textDim }}>Role: user</div>
+              {createError && <div role="alert" style={{ fontSize: sz.sm, color: C.danger }}>{createError}</div>}
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 24 }}>
+              <Btn secondary onClick={closeCreate} disabled={creating}>Cancel</Btn>
+              <Btn type="submit" disabled={creating}>{creating ? "Creating..." : "Create User"}</Btn>
+            </div>
+          </form>
+        </Modal>
       )}
 
       <Toast message={toast} />

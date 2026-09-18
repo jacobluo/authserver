@@ -4,6 +4,7 @@ import { C, fonts, alpha } from "../tokens";
 interface BtnProps {
   children: ReactNode;
   onClick?: () => void;
+  type?: "button" | "submit" | "reset";
   danger?: boolean;
   secondary?: boolean;
   small?: boolean;
@@ -11,9 +12,10 @@ interface BtnProps {
   full?: boolean;
 }
 
-export default function Btn({ children, onClick, danger, secondary, small, disabled, full }: BtnProps) {
+export default function Btn({ children, onClick, type = "button", danger, secondary, small, disabled, full }: BtnProps) {
   return (
     <button
+      type={type}
       onClick={onClick}
       disabled={disabled}
       style={{
