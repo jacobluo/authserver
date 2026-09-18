@@ -199,11 +199,8 @@ export async function verifyAuth(): Promise<{ valid: boolean; version: string }>
 
 export async function logout(): Promise<void> {
   if (!apiKey) {
-    try {
-      await apiFetch("/admin/auth/logout", { method: "POST" });
-    } finally {
-      clearAuthentication();
-    }
+    await apiFetch("/admin/auth/logout", { method: "POST" });
+    clearAuthentication();
     return;
   }
   clearAuthentication();

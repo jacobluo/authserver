@@ -43,3 +43,36 @@ test("admin authentication credentials remain in memory and cookie writes carry 
   assert.match(api, /credentials:\s*["']same-origin["']/);
   assert.match(api, /headers\.set\(["']X-Admin-CSRF["']/);
 });
+
+test("a failed account logout preserves CSRF authentication for a retry", async () => {
+  const api = require(resolve(projectDir, "src/api.ts"));
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (path, options = {}) => {
+    requests.push({ path, options });
+    if (path === "/admin/auth/login") {
+      return new Response(JSON.stringify({
+        id: "admin-1",
+        email: "admin@example.test",
+        name: "Admin",
+        csrf_token: "csrf-for-retry",
+        expires_at: "2030-01-01T00:00:00Z",
+      }), { status: 200 });
+    }
+    if (path === "/admin/auth/logout") {
+      return new Response(JSON.stringify({ detail: "server unavailable" }), { status: 500 });
+    }
+    return new Response(null, { status: 204 });
+  };
+
+  try {
+    await api.loginWithPassword("admin@example.test", "correct-password");
+    await assert.rejects(api.logout(), { message: "server unavailable" });
+    await api.createUser({ email: "new@example.test", name: "New", password: "strong-password", role: "admin" });
+
+    const retryRequest = requests.at(-1);
+    assert.equal(new Headers(retryRequest.options.headers).get("X-Admin-CSRF"), "csrf-for-retry");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

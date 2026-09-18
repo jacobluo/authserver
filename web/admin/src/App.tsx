@@ -2,7 +2,7 @@ import { useEffect, useState, ReactNode } from "react";
 import { HashRouter, Routes, Route, NavLink, Navigate } from "react-router-dom";
 import { C, fonts, sz, alpha, applyTheme, applySizeScale, getTheme, getSizeScale } from "./tokens";
 import type { Theme, SizeScale } from "./tokens";
-import { getCurrentAccount, logout, onAuthenticationFailure } from "./api";
+import { AuthError, getCurrentAccount, logout, onAuthenticationFailure } from "./api";
 import Login from "./pages/Login";
 import Overview from "./pages/Overview";
 import Clients from "./pages/Clients";
@@ -566,9 +566,9 @@ function Sidebar({
 /*  Layout                                                             */
 /* ------------------------------------------------------------------ */
 
-interface LayoutProps { children: ReactNode; onLogout: () => void }
+interface LayoutProps { children: ReactNode; onLogout: () => void; logoutError: string | null }
 
-function Layout({ children, onLogout }: LayoutProps) {
+function Layout({ children, onLogout, logoutError }: LayoutProps) {
   const [collapsed, setCollapsed] = useState(
     () => localStorage.getItem("authplane_sidebar") === "collapsed",
   );
@@ -613,6 +613,11 @@ function Layout({ children, onLogout }: LayoutProps) {
           transition: "margin-left 0.2s ease",
         }}
       >
+        {logoutError && (
+          <div style={{ margin: "16px 28px 0", padding: "10px 14px", background: alpha(C.danger, 0x12), border: `1px solid ${alpha(C.danger, 0x40)}`, borderRadius: 6, color: C.danger, fontFamily: fonts.mono, fontSize: sz.sm }}>
+            {logoutError}
+          </div>
+        )}
         {children}
       </main>
     </div>
@@ -626,6 +631,7 @@ function Layout({ children, onLogout }: LayoutProps) {
 export default function App() {
   const [authed, setAuthed] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -650,12 +656,19 @@ export default function App() {
     };
   }, []);
 
-  const handleLogin = () => setAuthed(true);
+  const handleLogin = () => {
+    setLogoutError(null);
+    setAuthed(true);
+  };
   const handleLogout = async () => {
+    setLogoutError(null);
     try {
       await logout();
-    } finally {
       setAuthed(false);
+    } catch (err) {
+      if (!(err instanceof AuthError)) {
+        setLogoutError(err instanceof Error ? `${err.message} — please try again.` : "Unable to sign out — please try again.");
+      }
     }
   };
 
@@ -669,7 +682,7 @@ export default function App() {
 
   return (
     <HashRouter>
-      <Layout onLogout={handleLogout}>
+      <Layout onLogout={handleLogout} logoutError={logoutError}>
         <Routes>
           <Route path="/" element={<Overview />} />
           <Route path="/clients" element={<Clients />} />
