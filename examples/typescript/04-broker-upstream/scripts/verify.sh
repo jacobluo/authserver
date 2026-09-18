@@ -74,7 +74,7 @@ provider_status=$(curl -s -o /tmp/provider.$$ -w '%{http_code}' -X POST "${ADMIN
   "protocol": "oauth",
   "config_data": {
     "client_id": "Iv1.fakeoauthapp_abc123",
-    "client_secret_env": "AUTHPLANE_ADMIN_API_KEY",
+    "client_secret_ref": "AUTHPLANE_ADMIN_API_KEY",
     "authorize_url": "https://github.example.invalid/login/oauth/authorize",
     "token_url": "https://github.example.invalid/login/oauth/access_token"
   }
@@ -218,7 +218,7 @@ trap 'rm -f "$agent_log"' EXIT
 # path here, not a failure. `|| true` keeps `set -e` from tripping; we
 # assert on the log content below.
 log "running agent (expect ConsentRequiredError + consent_url)"
-docker compose run --rm \
+docker compose --progress quiet run --build --rm \
   -e AUTHPLANE_ISSUER="http://authserver:9000" \
   -e AUTHPLANE_CLIENT_ID="${CLIENT_ID}" \
   -e AUTHPLANE_CLIENT_SECRET="${CLIENT_SECRET}" \

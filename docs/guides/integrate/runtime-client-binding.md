@@ -19,11 +19,18 @@
 
 The OAuth `client_id` and the Resource `slug` are distinct identities with an N:N relationship at runtime. One OAuth client can play different roles across calls; one Resource can be served by multiple OAuth client identities (prod tier, canary, multiple regions). `policy.runtime.client_ids` is the **only** place Authplane learns which `client_id`s may act AS a given Resource — there is no implicit slug/client-id binding.
 
-**Default:** empty list = **default-deny**. No client may act AS the Resource. (Opposite of `policy.exchange.allowed_client_ids`, which is permissive when empty.)
+**Default:** empty list = **default-deny**. No client may act AS the Resource. (Not the same as `policy.exchange.allowed_client_ids`, which is permissive when empty — but only for a client exchanging a token issued to itself; delegating another client's token needs an explicit entry there, or an entry in this list, which says the caller *is* the Resource.)
 
 **You need this when:** an OAuth client authenticates to `/oauth/token` and the broker agent-attestation gate must resolve that client to its actor MCP — i.e., any time an agent or gateway exchanges a token for a broker Resource and no [fronting link](../../concepts/glossary.md#glossary-fronting-link) covers the source/target pair.
 
 **You don't need this when:** the exchange targets a Mint Resource, or a fronting link already covers the (source → target) pair, or the dispatch doesn't hit the gate (direct user→MCP, refresh, `client_credentials`, `jwt-bearer`, authorization code).
+
+**You also need this for introspection.** A resource server calling
+`POST /oauth/introspect` about a token one of its clients presented is asking
+about somebody else's token, so Authplane checks the same binding to confirm
+the caller speaks for the Resource in the token's `aud`. Without it the
+endpoint answers `{"active": false}`. See
+[Resource Server SDK → real-time revocation](sdk-resource-server.md).
 
 ## Steps
 
@@ -118,7 +125,7 @@ Run the token-exchange call from your agent. The actor MCP resolves through `pol
 | Same call works when a fronting link is present and breaks when removed | The fronting link was masking missing `runtime.client_ids` config | Configure `runtime.client_ids` so dispatch stands on its own; fronting then handles only its actual job (operator-vouching across hops) |
 | Audit log warning: `resolved actor MCP via deprecated slug==client_id convention` | The legacy slug-match fallback fired (one-release deprecation window) | Configure `runtime.client_ids` explicitly — the fallback will be removed |
 | `403` from the admin API when listing runtime clients | Missing or wrong `AUTHPLANE_ADMIN_API_KEY` | Check the env var and that you're hitting the admin port (`:9001`), not the public port |
-| Empty `runtime.client_ids` rejects calls you expected to allow | Default-deny semantics: empty = no one. Different from `exchange.allowed_client_ids` (empty = any) | Populate the list explicitly; the default is deliberate |
+| Empty `runtime.client_ids` rejects calls you expected to allow | Default-deny semantics: empty = no one. Different from `exchange.allowed_client_ids`, where empty = any client exchanging its **own** token (delegating another client's token needs an entry in one list or the other) | Populate the list explicitly; the default is deliberate |
 
 ## See also
 

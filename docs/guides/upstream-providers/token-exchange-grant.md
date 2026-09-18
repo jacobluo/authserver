@@ -30,7 +30,7 @@ token_exchange:
 | `enabled` | bool | yes | When `false`, every exchange returns `unsupported_grant_type`. |
 | `max_chain_depth` | int (1–10) | yes (when enabled) | Max nesting of the [`act`](../../concepts/glossary.md#glossary-act-claim) chain. Start at 3–4; raise only on demand. |
 | `token_expiry` | duration | yes (when enabled) | Lifetime of exchanged tokens. Keep short (`15m`–`1h`). |
-| `allow_self_exchange` | bool | no (default `false`) | Lets a client exchange a token it itself was issued for one with narrower scope. |
+| `allow_self_exchange` | bool | no (default `false`) | Lets a client exchange a token it itself was issued for one with narrower scope. On Mint resources self-exchange skips the user-consent gate; only `policy.exchange.allowed_client_ids` (and the subject-scope ceiling) still apply — see the order of evaluation in Step 3. Broker resources never skip their consent check for self-exchange. |
 
 Equivalent env vars: `AUTHPLANE_TOKEN_EXCHANGE_ENABLED`, `AUTHPLANE_TOKEN_EXCHANGE_MAX_CHAIN_DEPTH`, `AUTHPLANE_TOKEN_EXCHANGE_TOKEN_EXPIRY`, `AUTHPLANE_TOKEN_EXCHANGE_ALLOW_SELF_EXCHANGE`. See [`docs/reference/env-vars.md`](../../reference/env-vars.md).
 
@@ -53,7 +53,7 @@ If you already registered the client, add the grant type with `PATCH /admin/clie
 
 ## Step 3: Gate the resource with `policy.exchange.allowed_client_ids`
 
-Per-resource ACL. Empty list means "any consented client may exchange against this resource". Set it explicitly to lock down which acting clients can vend each resource. Verified against [`POST /admin/resources/{slug}/policy/exchange/allowed-clients`](../../reference/http-api.md#http-admin-resources-slug-policy-exchange-allowed-clients-create):
+Per-resource ACL. Empty list means "any client may exchange against this resource" (user consent is a separate gate — see the order of evaluation below — and Mint self-exchange skips it). Set it explicitly to lock down which acting clients can vend each resource. Verified against [`POST /admin/resources/{slug}/policy/exchange/allowed-clients`](../../reference/http-api.md#http-admin-resources-slug-policy-exchange-allowed-clients-create):
 
 ```bash
 curl -X POST "http://localhost:9001/admin/resources/github/policy/exchange/allowed-clients" \
@@ -62,7 +62,11 @@ curl -X POST "http://localhost:9001/admin/resources/github/policy/exchange/allow
   -d '{ "client_id": "mcp-server-prod" }'
 ```
 
-> Order of evaluation when an exchange arrives: (1) self-exchange — if `allow_self_exchange: true` AND the acting `client_id` equals the subject token's `client_id`, allow. (2) `may_act` claim — if the subject token carries `may_act.sub=<acting client_id>` (set by the original issuer), allow. (3) `policy.exchange.allowed_client_ids` — empty or contains the acting client. For Broker resources, the three-bound consent check (`consent_grants` + `broker_grants`) is then applied. If none of (1)/(2)/(3) pass, the response is `access_denied`.
+> **Order of evaluation** when `resource=<slug>` names a registered resource. The requested scope is first checked against the resource's scope catalog (unknown scopes are rejected before any dispatch — except on the fronted Mint→Broker path, which is gated against the fronting link's `scope_map` instead). Then, for a **Mint** resource on the direct (non-fronted) path: (1) **operator gate** — `policy.exchange.allowed_client_ids`; empty = any client, otherwise the acting `client_id` must be listed. (1b) **cross-client gate** — when the acting `client_id` differs from the subject token's `client_id`, the acting client must appear either in that same list or in the resource's `policy.runtime.client_ids`, and an empty pair of lists denies. The consent row consulted in (3) is keyed on the subject token's client, so without this the delegate would spend a grant it was never given. A `policy.runtime.client_ids` entry satisfies the gate because it declares the caller **is** this resource, so there is no third party being delegated to; note that a non-empty `policy.exchange.allowed_client_ids` still has to admit the caller at (1) first. (2) **subject-scope ceiling** — the issued scope must be a subset of the subject token's scope (vacuous when the subject token carries no `scope` claim). (3) **user-consent gate** — a `consent_grants` row for (user, agent, resource) covering the requested scopes; **skipped when `allow_self_exchange: true` and the acting `client_id` equals the subject token's `client_id`** (self-exchange). For a **Broker** resource on the direct path: delegation (`actor_token`) is rejected, then the operator gate, the subject-scope ceiling, and the agent-attestation gate — which resolves the acting `client_id` to a Mint resource via `policy.runtime.client_ids` (default-deny) and then performs the **only** `consent_grants` read on this path: a row must exist for (user, agent, actor-MCP) and must cover every requested scope (bound C). Self-exchange does **not** skip it. Finally `BrokerIssuer` bounds the vend against `broker_grants.scopes_granted` (bound E); it never reads `consent_grants`, so there is no second consent check after attestation to look for when debugging an `access_denied` or `consent_required`. A fronted Mint→Broker exchange leaves right after the operator gate: the subject-scope ceiling and the agent-attestation gate never run, and the fronting link's `scope_map` takes their place — every requested target scope must be a value in the map, and the subject token must carry **at least one** source-side scope mapping to it. `broker_grants` still bounds the vend.
+>
+> Note the Mint composition: with an **empty allowlist and `allow_self_exchange: true`**, (1) and (3) both pass without checking anything — only the catalog and the scope ceiling bound the result, and the ceiling binds only when the subject token carries a `scope` claim; an identity-only subject token is bounded by the catalog alone. A self-exchange cannot obtain scope beyond that bound, but nothing beyond the catalog gates *which* Mint resource it may target. Populate the allowlist when that matters.
+>
+> When `resource` is omitted (legacy fall-through), the only exchange that can be authorized is a self-exchange: `allow_self_exchange: true` allows it, `false` denies it. An acting `client_id` that differs from the subject token's is refused outright on this path — there is no per-resource policy in play without a `resource`, so nothing there can authorize a delegation. Name the resource to get the operator gate. Either refusal yields `access_denied`.
 
 ## Scenario A — Brokered vend (MCP server gets a user's upstream token)
 
@@ -101,7 +105,7 @@ Gate this resource with `policy.exchange.allowed_client_ids: ["sub-agent-a"]` so
 
 ## Scenario C — Self-exchange (scope narrowing)
 
-A client narrows its own token's scope (e.g. peel off `mcp:admin` before passing the token deeper). Requires `allow_self_exchange: true`.
+A client narrows its own token's scope (e.g. peel off `mcp:admin` before passing the token deeper). Requires `allow_self_exchange: true`. If the target is a Mint resource with an empty `policy.exchange.allowed_client_ids`, nothing but the catalog and the scope ceiling gates this call — populate the allowlist when it matters which clients may self-exchange against the resource. The empty-list default is permissive only here, for a client narrowing its own token; delegating another client's token needs an explicit entry. Broker resources still run their consent check.
 
 ```bash
 curl -X POST http://localhost:9000/oauth/token \
@@ -144,7 +148,9 @@ The supported pattern is **service-account user**:
 
 4. At runtime the bot calls `/oauth/token` twice — first to get a user-scoped token for `bot-prod`, then to exchange that for the upstream token exactly as in Scenario A.
 
-Revoke with one call: `DELETE /admin/grants/broker/{id}` ([anchor](../../reference/http-api.md#http-admin-grants-broker-id-delete)) or disable the user via `PATCH /admin/users/{id}/disable` ([anchor](../../reference/http-api.md#http-admin-users-id-disable)).
+Revoke with one call: `DELETE /admin/grants/broker/{id}` ([anchor](../../reference/http-api.md#http-admin-grants-broker-id-delete)).
+
+> Disabling the service-account user (`PATCH /admin/users/{id}/disable`) is **not** equivalent here. Token-exchange and jwt-bearer do not re-validate the subject, so a disabled service account keeps exchanging its still-valid access token for fresh ones. Revoke the grant, or revoke the tokens with `DELETE /admin/users/{id}/tokens`.
 
 > **RFC 8693 §1.3:** distinguishes *delegation* (actor ≠ subject) from *impersonation* (actor = subject). Authplane supports delegation natively. True impersonation onto a broker grant is not supported by design — the service-account-user pattern is the clean ownership model.
 
@@ -167,7 +173,7 @@ For Scenario B/C tokens, decode the response and inspect the `act` claim — eac
 |---|---|---|
 | `unsupported_grant_type` | Token Exchange is disabled, or the requesting client wasn't registered with the grant type | Set `token_exchange.enabled: true`. Add `"urn:ietf:params:oauth:grant-type:token-exchange"` to the client's `grant_types` (see step 2). |
 | `unauthorized_client` | Client exists but doesn't have token-exchange in its `grant_types` | `PATCH /admin/clients/{id}` ([anchor](../../reference/http-api.md#http-admin-clients-id-update)) to add the grant type. |
-| `access_denied` | Acting client not allowed for the target resource (Scenario A/B), or all three policy checks failed | Add the acting client to `policy.exchange.allowed_client_ids` (step 3), or leave the list empty to allow any consented client. |
+| `access_denied` | Acting client not allowed for the target resource (Scenario A/B), or a cross-client exchange was attempted with no `resource` parameter, where nothing can authorize one | Add the acting client to `policy.exchange.allowed_client_ids` (step 3). Leaving the list empty allows any client only when it exchanges its own token; a client delegating another client's token must be listed. |
 | `invalid_target` | `resource=<slug>` doesn't match a registered resource, or the slug is a Broker resource whose `broker_provider_slug` isn't registered | `GET /admin/resources` ([anchor](../../reference/http-api.md#http-admin-resources-list)) — confirm the slug and the provider link. |
 | `invalid_scope` | Requested scope isn't in the subject token's scope (for Mint exchanges), or isn't declared on the resource (for Broker) | You can only narrow scopes, never widen them. For Broker, edit the resource's `scopes[]` catalog. |
 | `invalid_grant` | Subject token is expired or revoked; or a bot's `client_credentials` token was used against a Broker resource (Scenario D footgun) | User must re-authenticate. For the bot footgun, switch to the service-account-user pattern (Scenario D). |

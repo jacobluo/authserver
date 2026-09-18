@@ -105,6 +105,7 @@ CIMDConfig controls Client ID Metadata Document handling.
 
 | Key | Type | Default | Env var | Notes |
 | --- | --- | --- | --- | --- |
+| `cimd.allow_private_addresses` | `bool` | `false` | `AUTHPLANE_CIMD_ALLOW_PRIVATE_ADDRESSES` | AllowPrivateAddresses turns off SSRF address filtering for CIMD document fetches, at both the URL check and the dial. Local development only: with it set, a document URL may resolve to loopback, RFC 1918 space or the cloud metadata endpoint. Validate refuses it unless server.issuer is localhost, so it cannot be left on in a deployment. |
 | `cimd.cache_ttl` | `duration` | `1h` | `AUTHPLANE_CIMD_CACHE_TTL` | — |
 | `cimd.enabled` | `bool` | `true` | `AUTHPLANE_CIMD_ENABLED` | — |
 | `cimd.fetch_timeout` | `duration` | `10s` | `AUTHPLANE_CIMD_FETCH_TIMEOUT` | — |
@@ -138,7 +139,8 @@ RateLimitConfig controls global rate limiting.
 | `rate_limit.auth_lockout` | `duration` | `15m` | `AUTHPLANE_RATE_LIMIT_AUTH_LOCKOUT` | — |
 | `rate_limit.burst` | `int` | `200` | `AUTHPLANE_RATE_LIMIT_BURST` | — |
 | `rate_limit.enabled` | `bool` | `true` | `AUTHPLANE_RATE_LIMIT_ENABLED` | — |
-| `rate_limit.requests_per_second` | `float64` | `100` | `AUTHPLANE_RATE_LIMIT_RPS` | — |
+| `rate_limit.max_tracked_identities` | `int` | `250000` | `AUTHPLANE_RATE_LIMIT_MAX_TRACKED_IDENTITIES` | MaxTrackedIdentities bounds how many identities the auth-failure lockout holds at once. Its key space is caller-chosen — anyone posting the login form can mint entries with made-up addresses — so at the bound the lockout evicts an entry that is not currently locked rather than refusing the newcomer, so a flood of invented addresses cannot leave an untouched account unprotected; lockouts already in force are never evicted. Only when every tracked identity is locked is a newcomer refused. Raise it alongside auth_fail_window, which scales the live set linearly. This bounds the NUMBER of entries. Each one is bounded separately, by the 254-byte cap on the identity — without that, a count-only bound would say 41 MB and admit 16 GB. |
+| `rate_limit.requests_per_second` | `float64` | `100` | `AUTHPLANE_RATE_LIMIT_RPS` | RequestsPerSecond is the per-source-address token-refill rate. It must be greater than zero: x/time/rate reads Limit(0) as "never refill", so a zero here does not disable the limiter — it lets each address spend Burst and then denies it for the process lifetime. Validate rejects it. Turn throughput limiting off with Enabled: false. |
 
 ## `admin`
 
@@ -150,6 +152,8 @@ AdminConfig controls the admin API server.
 | --- | --- | --- | --- | --- |
 | `admin.address` | `string` | `:9001` | `AUTHPLANE_ADMIN_ADDRESS` | — |
 | `admin.api_key` | `string` | — | `AUTHPLANE_ADMIN_API_KEY` | Required when admin is enabled and server.issuer is not localhost. |
+| `admin.audit_default_lookback` | `duration` | `24h` | `AUTHPLANE_ADMIN_AUDIT_DEFAULT_LOOKBACK` | AuditDefaultLookback is how far back GET /admin/audit reaches when the caller omits since. AuditMaxLookback is the furthest back a caller may ask; a request beyond it is rejected rather than silently narrowed, so a client is never handed a short answer to a long question. audit_events is the highest-volume table in the schema, and the feed pages on offset, so both bounds exist to stop one request walking all of it. They are here, and not constants, because only the deployment knows its compliance window: an operator retaining a year of audit for an exporter raises audit_max_lookback rather than losing reach over its own data. |
+| `admin.audit_max_lookback` | `duration` | `720h` | `AUTHPLANE_ADMIN_AUDIT_MAX_LOOKBACK` | — |
 | `admin.burst` | `int` | — | — | Burst size for rate limiter |
 | `admin.enabled` | `bool` | `true` | `AUTHPLANE_ADMIN_ENABLED` | — |
 | `admin.requests_per_second` | `float64` | — | — | Per-IP rate limit (0 = no limit) |
@@ -162,7 +166,8 @@ OAuthConfig controls OAuth authorization server behavior.
 
 | Key | Type | Default | Env var | Notes |
 | --- | --- | --- | --- | --- |
-| `oauth.require_scope` | `bool` | `true` | `AUTHPLANE_OAUTH_REQUIRE_SCOPE` | RequireScope rejects authorize requests missing the scope parameter with invalid_scope (RFC 6749 §3.3 compliant). When false, missing scope defaults to all registered scopes for the resource (ADR-012). |
+| `oauth.require_scope` | `bool` | `true` | `AUTHPLANE_OAUTH_REQUIRE_SCOPE` | RequireScope rejects authorize requests missing the scope parameter with invalid_scope. When false, missing scope is processed using a pre-defined default value: all scopes registered for the resource. RFC 6749 §3.3 requires the server to do one or the other — "either process the request using a pre-defined default value or fail the request indicating an invalid scope" — so both settings are conformant and this flag picks between them. Defaults to true. |
+| `oauth.state_max_age` | `duration` | `10m` | `AUTHPLANE_OAUTH_STATE_MAX_AGE` | StateMaxAge bounds the OIDC state cookie's lifetime: both the cookie's Max-Age attribute and the server-side freshness window checked at callback. Default 10m. A shorter value tightens the state replay window (regulatory or UX driven, per deployment). |
 
 ## `oidc`
 
@@ -173,8 +178,9 @@ OIDCConfig controls upstream OIDC federation (single provider, OSS).
 | Key | Type | Default | Env var | Notes |
 | --- | --- | --- | --- | --- |
 | `oidc.client_id` | `string` | — | `AUTHPLANE_OIDC_CLIENT_ID` | client_id registered with upstream IdP Required when oidc is enabled. |
-| `oidc.client_secret` | `string` | — | `AUTHPLANE_OIDC_CLIENT_SECRET` | client_secret registered with upstream IdP Required when oidc is enabled. |
-| `oidc.client_secret_env` | `string` | — | — | env var name for client_secret (takes precedence over client_secret) |
+| `oidc.client_secret` | `string` | — | `AUTHPLANE_OIDC_CLIENT_SECRET` | client_secret registered with upstream IdP |
+| `oidc.client_secret_env` | `string` | — | — | DEPRECATED: pre-v0.1.2 name for client_secret_ref; normalized into ClientSecretRef at load time. Also marks the ref as legacy-sourced, which exempts it from the CONNECTOR_*/AUTHPLANE_VAULT_* naming rule. Remove in a future release. |
+| `oidc.client_secret_ref` | `string` | — | — | env var name for client_secret (mutually exclusive with client_secret; set only one) |
 | `oidc.connector_id` | `string` | — | `AUTHPLANE_OIDC_CONNECTOR_ID` | Dex connector_id parameter (optional) |
 | `oidc.display_name` | `string` | — | `AUTHPLANE_OIDC_DISPLAY_NAME` | button text, e.g. "Okta", "Google" |
 | `oidc.enabled` | `bool` | — | `AUTHPLANE_OIDC_ENABLED` | — |
@@ -182,7 +188,7 @@ OIDCConfig controls upstream OIDC federation (single provider, OSS).
 | `oidc.issuer` | `string` | — | `AUTHPLANE_OIDC_ISSUER` | upstream issuer URL (e.g., https://accounts.google.com) Required when oidc is enabled. |
 | `oidc.redirect_uri` | `string` | — | `AUTHPLANE_OIDC_REDIRECT_URI` | explicit redirect_uri for OIDC callback Required when oidc is enabled. |
 | `oidc.scopes` | `[]string` | — | `AUTHPLANE_OIDC_SCOPES` | OIDC scopes; defaults to ["openid","email","profile"] |
-| `oidc.show_local_login` | `bool` | `true` | `AUTHPLANE_OIDC_SHOW_LOCAL_LOGIN` | show password form when OIDC is enabled (default true) |
+| `oidc.show_local_login` | `bool` | `true` | `AUTHPLANE_OIDC_SHOW_LOCAL_LOGIN` | local password login: false hides the form and POST /login answers 404 (default true) |
 
 ## `observability`
 
@@ -255,7 +261,7 @@ ClientCredentialsConfig controls the client_credentials grant (RFC 6749 §4.4).
 
 | Key | Type | Default | Env var | Notes |
 | --- | --- | --- | --- | --- |
-| `client_credentials.enabled` | `bool` | `false` | `AUTHPLANE_CLIENT_CREDENTIALS_ENABLED` | — |
+| `client_credentials.enabled` | `bool` | `true` | `AUTHPLANE_CLIENT_CREDENTIALS_ENABLED` | — |
 | `client_credentials.token_expiry` | `duration` | `1h` | `AUTHPLANE_CLIENT_CREDENTIALS_TOKEN_EXPIRY` | machine token TTL (default: 1h) |
 
 ## `dpop`
@@ -266,7 +272,7 @@ DPoPConfig controls DPoP proof-of-possession (RFC 9449).
 
 | Key | Type | Default | Env var | Notes |
 | --- | --- | --- | --- | --- |
-| `dpop.enabled` | `bool` | `false` | `AUTHPLANE_DPOP_ENABLED` | enable DPoP support (default: false) |
+| `dpop.enabled` | `bool` | `true` | `AUTHPLANE_DPOP_ENABLED` | enable DPoP support (default: true; support only — a client that sends no proof still receives a bearer token) |
 | `dpop.nonce_ttl` | `duration` | `60s` | `AUTHPLANE_DPOP_NONCE_TTL` | TTL for server-issued nonces (default: 60s) |
 | `dpop.proof_lifetime` | `duration` | `60s` | `AUTHPLANE_DPOP_PROOF_LIFETIME` | max \|now - iat\| for proof freshness (default: 60s) |
 | `dpop.require_nonce` | `bool` | — | `AUTHPLANE_DPOP_REQUIRE_NONCE` | when true, all DPoP proofs must include server nonce (default: false) |
@@ -280,7 +286,7 @@ TokenExchangeConfig controls RFC 8693 token exchange.
 | Key | Type | Default | Env var | Notes |
 | --- | --- | --- | --- | --- |
 | `token_exchange.allow_self_exchange` | `bool` | — | `AUTHPLANE_TOKEN_EXCHANGE_ALLOW_SELF_EXCHANGE` | when true, client may exchange its own token for narrower scope (default: false) |
-| `token_exchange.enabled` | `bool` | `false` | `AUTHPLANE_TOKEN_EXCHANGE_ENABLED` | — |
+| `token_exchange.enabled` | `bool` | `true` | `AUTHPLANE_TOKEN_EXCHANGE_ENABLED` | — |
 | `token_exchange.max_chain_depth` | `int` | `5` | `AUTHPLANE_TOKEN_EXCHANGE_MAX_CHAIN_DEPTH` | maximum delegation chain depth (required when enabled, 1-10) |
 | `token_exchange.token_expiry` | `duration` | `1h` | `AUTHPLANE_TOKEN_EXCHANGE_TOKEN_EXPIRY` | TTL for exchanged tokens (required when enabled) |
 
@@ -314,12 +320,12 @@ XAAConfig controls Enterprise-Managed Authorization (Cross App Access).
 
 | Key | Type | Default | Env var | Notes |
 | --- | --- | --- | --- | --- |
-| `xaa.enabled` | `bool` | — | — | — |
-| `xaa.jwks_cache_ttl` | `duration` | — | — | JWKS cache TTL (default: 1h) |
-| `xaa.max_assertion_age` | `duration` | — | — | Max age of ID-JAG iat (default: 5m) |
-| `xaa.require_resource` | `bool` | — | — | Require resource claim in assertions (default: false) |
-| `xaa.subject_mode` | `string` | — | — | "auto_map" or "strict" (default: "auto_map") |
-| `xaa.token_expiry` | `duration` | — | — | TTL for XAA-issued access tokens (default: 1h) |
+| `xaa.enabled` | `bool` | `true` | `AUTHPLANE_XAA_ENABLED` | — |
+| `xaa.jwks_cache_ttl` | `duration` | `1h` | `AUTHPLANE_XAA_JWKS_CACHE_TTL` | JWKS cache TTL (default: 1h) |
+| `xaa.max_assertion_age` | `duration` | `5m` | `AUTHPLANE_XAA_MAX_ASSERTION_AGE` | Max age of ID-JAG iat (default: 5m) |
+| `xaa.require_resource` | `bool` | `false` | `AUTHPLANE_XAA_REQUIRE_RESOURCE` | Refuse exchanges that name no resource, on the assertion or the request (default: false) |
+| `xaa.subject_mode` | `string` | `auto_map` | `AUTHPLANE_XAA_SUBJECT_MODE` | "auto_map" or "strict" (default: "auto_map") |
+| `xaa.token_expiry` | `duration` | `1h` | `AUTHPLANE_XAA_TOKEN_EXPIRY` | TTL for XAA-issued access tokens (default: 1h) |
 
 ## `client_secret_pepper`
 

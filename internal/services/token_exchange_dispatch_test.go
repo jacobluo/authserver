@@ -12,6 +12,7 @@ import (
 	"github.com/go-jose/go-jose/v4"
 
 	"github.com/authplane/authserver/internal/adapters/keyfile"
+	"github.com/authplane/authserver/internal/adapters/static"
 	"github.com/authplane/authserver/internal/brokerproto"
 	"github.com/authplane/authserver/internal/crypto"
 	"github.com/authplane/authserver/internal/domain"
@@ -60,14 +61,14 @@ type storeBundle struct {
 
 func newDispatchSetup(t *testing.T) *dispatchSetup {
 	t.Helper()
-	return newDispatchSetupWithConfig(t, services.TokenExchangeConfig{
+	return newDispatchSetupWithConfig(t, output.TokenExchangeConfig{
 		AllowSelfExchange: true,
 		MaxChainDepth:     5,
 		TokenExpiry:       15 * time.Minute,
 	})
 }
 
-func newDispatchSetupWithConfig(t *testing.T, cfg services.TokenExchangeConfig) *dispatchSetup {
+func newDispatchSetupWithConfig(t *testing.T, cfg output.TokenExchangeConfig) *dispatchSetup {
 	t.Helper()
 
 	stores := testdata.SetupTestStores(t)
@@ -78,7 +79,7 @@ func newDispatchSetupWithConfig(t *testing.T, cfg services.TokenExchangeConfig) 
 	if err != nil {
 		t.Fatalf("keyfile: %v", err)
 	}
-	jwksSvc := services.NewJWKSService(ks, "ES256", obs)
+	jwksSvc := services.NewJWKSService(ks, nil, "ES256", obs)
 	auditSvc := services.NewAuditService(stores.Audit, obs)
 
 	bundle := &storeBundle{
@@ -88,7 +89,7 @@ func newDispatchSetupWithConfig(t *testing.T, cfg services.TokenExchangeConfig) 
 		brokerGrants: stores.BrokerGrant,
 	}
 
-	mintIssuer := services.NewMintIssuer(jwksSvc, stores.Issuance, teIssuer, obs)
+	mintIssuer := services.NewMintIssuer(jwksSvc, stores.Issuance, staticIssuerForTest(teIssuer), obs)
 
 	enc := &dispatchEncryptor{}
 	stub := &dispatchStubAdapter{name: "oauth"}
@@ -105,7 +106,7 @@ func newDispatchSetupWithConfig(t *testing.T, cfg services.TokenExchangeConfig) 
 
 	svc := services.NewTokenExchangeService(
 		stores.Client, stores.MachineToken, jwksSvc, jwksSvc, stores.Revocation,
-		teIssuer, cfg,
+		staticIssuerForTest(teIssuer), static.NewTokenExchangeConfigProvider(cfg),
 		registry, stores.ConsentGrant, mintIssuer, brokerIssuer,
 		obs, auditSvc,
 	)
@@ -142,6 +143,15 @@ func newDispatchSetupWithConfig(t *testing.T, cfg services.TokenExchangeConfig) 
 // catalog. URI is derived from slug for test simplicity.
 func (s *dispatchSetup) seedMintResource(t *testing.T, slug string, scopes []string, allowedClientIDs []string) *resource.Resource {
 	t.Helper()
+	return s.seedMintResourcePolicy(t, slug, scopes, resource.Policy{
+		Exchange: resource.ExchangePolicy{AllowedClientIDs: allowedClientIDs},
+	})
+}
+
+// seedMintResourcePolicy seeds a Mint resource with a fully specified policy,
+// for cases that need more than the exchange allowlist.
+func (s *dispatchSetup) seedMintResourcePolicy(t *testing.T, slug string, scopes []string, policy resource.Policy) *resource.Resource {
+	t.Helper()
 	now := time.Now().UTC().Truncate(time.Second)
 	scs := make([]resource.Scope, len(scopes))
 	for i, name := range scopes {
@@ -154,11 +164,9 @@ func (s *dispatchSetup) seedMintResource(t *testing.T, slug string, scopes []str
 		URI:         "https://" + slug + ".test.example.com",
 		BackendKind: resource.BackendMint,
 		Scopes:      scs,
-		Policy: resource.Policy{
-			Exchange: resource.ExchangePolicy{AllowedClientIDs: allowedClientIDs},
-		},
-		CreatedAt: now,
-		UpdatedAt: now,
+		Policy:      policy,
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	}
 	if err := s.stores.resources.Create(context.Background(), r); err != nil {
 		t.Fatalf("seed mint resource %q: %v", slug, err)
@@ -399,7 +407,10 @@ func TestTokenExchangeService_Dispatch_MintTarget_HappyPath(t *testing.T) {
 	agent, _ := setup.makeAgentClient(t, "agent")
 	actor, actorSecret := setup.createTEClient(t, []string{token.GrantTypeTokenExchange}, "")
 
-	mintRes := setup.seedMintResource(t, "tasks-mcp", []string{"tasks.read", "tasks.write"}, nil)
+	// actor exchanges a token minted for agent — a cross-client delegation.
+	// The consent grant below belongs to agent, so only the operator can
+	// authorize actor to inherit it; naming actor here is that act.
+	mintRes := setup.seedMintResource(t, "tasks-mcp", []string{"tasks.read", "tasks.write"}, []string{actor.ID})
 	setup.seedUser(t, "user-alice")
 	setup.seedConsentGrant(t, "user-alice", agent.ID, mintRes.ID, []string{"tasks.read", "tasks.write"})
 
@@ -451,7 +462,7 @@ func TestTokenExchangeService_Dispatch_MintTarget_NoConsent_Required(t *testing.
 
 	agent, _ := setup.makeAgentClient(t, "agent")
 	actor, actorSecret := setup.createTEClient(t, []string{token.GrantTypeTokenExchange}, "")
-	mintRes := setup.seedMintResource(t, "secrets-mcp", []string{"secrets.read"}, nil)
+	mintRes := setup.seedMintResource(t, "secrets-mcp", []string{"secrets.read"}, []string{actor.ID})
 	setup.seedUser(t, "user-bob")
 	// Deliberately NO consent_grant for (user-bob, agent, secrets-mcp).
 	_ = mintRes
@@ -497,7 +508,7 @@ func TestTokenExchangeService_Dispatch_MintTarget_ScopeNotConsented_Required(t *
 
 	agent, _ := setup.makeAgentClient(t, "agent")
 	actor, actorSecret := setup.createTEClient(t, []string{token.GrantTypeTokenExchange}, "")
-	mintRes := setup.seedMintResource(t, "files-mcp", []string{"files.read", "files.write"}, nil)
+	mintRes := setup.seedMintResource(t, "files-mcp", []string{"files.read", "files.write"}, []string{actor.ID})
 	setup.seedUser(t, "user-carol")
 	// Consent only covers files.read; the request asks for files.write too.
 	setup.seedConsentGrant(t, "user-carol", agent.ID, mintRes.ID, []string{"files.read"})
@@ -531,10 +542,21 @@ func TestTokenExchangeService_Dispatch_MintTarget_ScopeNotConsented_Required(t *
 }
 
 // -------------------------------------------------------------------
-// 4. Mint dispatch — operator gate empty allowlist allows any client
+// 4. Mint dispatch — cross-client delegation needs an explicit
+// operator allowlist entry
 // -------------------------------------------------------------------
 
-func TestTokenExchangeService_Dispatch_MintTarget_OperatorGate_Empty_AllowsAny(t *testing.T) {
+// This case used to assert the opposite: an empty allowlist let any client
+// exchange, and the test was named OperatorGate_Empty_AllowsAny. The
+// scenario it described is the vulnerability — actor holds a token minted
+// for agent, and the consent grant the mint path consults is keyed on
+// agent, so actor rode a grant it was never given. The user authorized
+// agent to reach open-mcp; nobody authorized actor.
+//
+// The operator gate itself is still permissive on an empty allowlist (see
+// the self-exchange cases below). What changed is that a cross-client
+// exchange now requires membership rather than merely tolerating absence.
+func TestTokenExchangeService_Dispatch_MintTarget_CrossClient_EmptyAllowlist_Rejected(t *testing.T) {
 	setup := newDispatchSetup(t)
 	ctx := context.Background()
 
@@ -542,13 +564,15 @@ func TestTokenExchangeService_Dispatch_MintTarget_OperatorGate_Empty_AllowsAny(t
 	actor, actorSecret := setup.createTEClient(t, []string{token.GrantTypeTokenExchange}, "")
 	mintRes := setup.seedMintResource(t, "open-mcp", []string{"open.read"}, nil) // empty allowlist
 	setup.seedUser(t, "user-dave")
+	// The grant exists, and belongs to agent. That is precisely what actor
+	// must not be able to spend.
 	setup.seedConsentGrant(t, "user-dave", agent.ID, mintRes.ID, []string{"open.read"})
 
 	subjectClaims := identitySubjectClaims(agent.ID)
 	subjectClaims.Subject = "user-dave"
 	subjectToken := setup.mintSubjectToken(t, subjectClaims)
 
-	resp, err := setup.svc.Exchange(ctx, input.TokenExchangeRequest{
+	_, err := setup.svc.Exchange(ctx, input.TokenExchangeRequest{
 		SubjectToken:     subjectToken,
 		SubjectTokenType: token.TokenTypeAccessToken,
 		ClientID:         actor.ID,
@@ -556,11 +580,198 @@ func TestTokenExchangeService_Dispatch_MintTarget_OperatorGate_Empty_AllowsAny(t
 		Resource:         "open-mcp",
 		Scope:            "open.read",
 	})
+	if !errors.Is(err, domain.ErrTokenExchangeNotAuthorized) {
+		t.Fatalf("expected ErrTokenExchangeNotAuthorized, got %v", err)
+	}
+	// The denial must not read as a consent problem: re-prompting the user
+	// would not fix it, and pointing an operator at /authorize wastes their
+	// time. The remediation is policy.exchange.allowed_client_ids.
+	var cre *domain.ConsentRequiredError
+	if errors.As(err, &cre) {
+		t.Errorf("got ConsentRequiredError (%v) — an unauthorized delegate must not be told to re-consent", cre)
+	}
+}
+
+// The delegation chain the product advertises — user → agent → downstream
+// agent — still works once the operator names the delegate. Without a case
+// pinning this, a stricter reading of the gate could quietly kill the
+// feature and every remaining test would stay green.
+func TestTokenExchangeService_Dispatch_MintTarget_CrossClient_AllowlistedDelegate_Succeeds(t *testing.T) {
+	setup := newDispatchSetup(t)
+	ctx := context.Background()
+
+	agent, _ := setup.makeAgentClient(t, "agent")
+	delegate, delegateSecret := setup.createTEClient(t, []string{token.GrantTypeTokenExchange}, "")
+	mintRes := setup.seedMintResource(t, "chained-mcp", []string{"chain.read"}, []string{delegate.ID})
+	setup.seedUser(t, "user-dana")
+	setup.seedConsentGrant(t, "user-dana", agent.ID, mintRes.ID, []string{"chain.read"})
+
+	subjectClaims := identitySubjectClaims(agent.ID)
+	subjectClaims.Subject = "user-dana"
+	subjectToken := setup.mintSubjectToken(t, subjectClaims)
+
+	resp, err := setup.svc.Exchange(ctx, input.TokenExchangeRequest{
+		SubjectToken:     subjectToken,
+		SubjectTokenType: token.TokenTypeAccessToken,
+		ClientID:         delegate.ID,
+		ClientSecret:     delegateSecret,
+		Resource:         "chained-mcp",
+		Scope:            "chain.read",
+	})
 	if err != nil {
 		t.Fatalf("Exchange: %v", err)
 	}
 	if resp.AccessToken == "" {
 		t.Fatal("expected non-empty access_token")
+	}
+	// The subject stays the human. The delegate acts for user-dana, it does
+	// not become a principal.
+	if claims := parseClaims(t, resp.AccessToken); claims["sub"] != "user-dana" {
+		t.Errorf("sub = %v, want user-dana", claims["sub"])
+	}
+}
+
+// A client listed in the target's policy.runtime.client_ids IS the target.
+// Requiring an exchange-allowlist entry as well would mean naming a resource
+// as its own permitted delegate, so the common shape — a service exchanging a
+// user's web-app token for a token audienced to itself — needed configuration
+// to do nothing.
+func TestTokenExchangeService_Dispatch_MintTarget_CrossClient_RuntimeBoundClient_Succeeds(t *testing.T) {
+	setup := newDispatchSetup(t)
+	ctx := context.Background()
+
+	agent, _ := setup.makeAgentClient(t, "agent")
+	runtimeClient, runtimeSecret := setup.createTEClient(t, []string{token.GrantTypeTokenExchange}, "")
+	mintRes := setup.seedMintResourcePolicy(t, "self-mcp", []string{"self.read"}, resource.Policy{
+		// Exchange allowlist deliberately empty: the runtime binding is the
+		// only operator declaration in play.
+		Runtime: resource.RuntimePolicy{ClientIDs: []string{runtimeClient.ID}},
+	})
+	setup.seedUser(t, "user-frank")
+	setup.seedConsentGrant(t, "user-frank", agent.ID, mintRes.ID, []string{"self.read"})
+
+	subjectClaims := identitySubjectClaims(agent.ID)
+	subjectClaims.Subject = "user-frank"
+	subjectToken := setup.mintSubjectToken(t, subjectClaims)
+
+	resp, err := setup.svc.Exchange(ctx, input.TokenExchangeRequest{
+		SubjectToken:     subjectToken,
+		SubjectTokenType: token.TokenTypeAccessToken,
+		ClientID:         runtimeClient.ID,
+		ClientSecret:     runtimeSecret,
+		Resource:         "self-mcp",
+		Scope:            "self.read",
+	})
+	if err != nil {
+		t.Fatalf("Exchange: %v", err)
+	}
+	if resp.AccessToken == "" {
+		t.Fatal("expected non-empty access_token")
+	}
+	if claims := parseClaims(t, resp.AccessToken); claims["sub"] != "user-frank" {
+		t.Errorf("sub = %v, want user-frank", claims["sub"])
+	}
+}
+
+// The binding has to be to the target. Acting as some other resource says
+// nothing about who may hold a token audienced to this one — without this
+// case, reading the runtime list off the wrong resource would look correct.
+func TestTokenExchangeService_Dispatch_MintTarget_CrossClient_RuntimeBoundElsewhere_Rejected(t *testing.T) {
+	setup := newDispatchSetup(t)
+	ctx := context.Background()
+
+	agent, _ := setup.makeAgentClient(t, "agent")
+	other, otherSecret := setup.createTEClient(t, []string{token.GrantTypeTokenExchange}, "")
+	// other is the runtime client of a DIFFERENT resource.
+	setup.seedMintResourcePolicy(t, "elsewhere-mcp", []string{"elsewhere.read"}, resource.Policy{
+		Runtime: resource.RuntimePolicy{ClientIDs: []string{other.ID}},
+	})
+	mintRes := setup.seedMintResource(t, "target-mcp", []string{"target.read"}, nil)
+	setup.seedUser(t, "user-gina")
+	setup.seedConsentGrant(t, "user-gina", agent.ID, mintRes.ID, []string{"target.read"})
+
+	subjectClaims := identitySubjectClaims(agent.ID)
+	subjectClaims.Subject = "user-gina"
+	subjectToken := setup.mintSubjectToken(t, subjectClaims)
+
+	_, err := setup.svc.Exchange(ctx, input.TokenExchangeRequest{
+		SubjectToken:     subjectToken,
+		SubjectTokenType: token.TokenTypeAccessToken,
+		ClientID:         other.ID,
+		ClientSecret:     otherSecret,
+		Resource:         "target-mcp",
+		Scope:            "target.read",
+	})
+	if !errors.Is(err, domain.ErrTokenExchangeNotAuthorized) {
+		t.Fatalf("expected ErrTokenExchangeNotAuthorized, got %v", err)
+	}
+}
+
+// The runtime arm only widens the delegation gate. A non-empty exchange
+// allowlist is an explicit operator restriction and still wins, because the
+// operator gate at the top of dispatchMint rejects anyone missing from it
+// before the delegation gate is reached.
+func TestTokenExchangeService_Dispatch_MintTarget_RuntimeBound_ExplicitExchangeAllowlistStillWins(t *testing.T) {
+	setup := newDispatchSetup(t)
+	ctx := context.Background()
+
+	agent, _ := setup.makeAgentClient(t, "agent")
+	allowed, _ := setup.createTEClient(t, []string{token.GrantTypeTokenExchange}, "")
+	runtimeClient, runtimeSecret := setup.createTEClient(t, []string{token.GrantTypeTokenExchange}, "")
+	mintRes := setup.seedMintResourcePolicy(t, "restricted-mcp", []string{"restricted.read"}, resource.Policy{
+		Exchange: resource.ExchangePolicy{AllowedClientIDs: []string{allowed.ID}},
+		Runtime:  resource.RuntimePolicy{ClientIDs: []string{runtimeClient.ID}},
+	})
+	setup.seedUser(t, "user-hank")
+	setup.seedConsentGrant(t, "user-hank", agent.ID, mintRes.ID, []string{"restricted.read"})
+
+	subjectClaims := identitySubjectClaims(agent.ID)
+	subjectClaims.Subject = "user-hank"
+	subjectToken := setup.mintSubjectToken(t, subjectClaims)
+
+	_, err := setup.svc.Exchange(ctx, input.TokenExchangeRequest{
+		SubjectToken:     subjectToken,
+		SubjectTokenType: token.TokenTypeAccessToken,
+		ClientID:         runtimeClient.ID,
+		ClientSecret:     runtimeSecret,
+		Resource:         "restricted-mcp",
+		Scope:            "restricted.read",
+	})
+	if !errors.Is(err, domain.ErrTokenExchangeNotAuthorized) {
+		t.Fatalf("expected ErrTokenExchangeNotAuthorized, got %v", err)
+	}
+}
+
+// The runtime binding answers who may hold the token, not whether the user
+// agreed. Consent is still the user's half of the decision and is unchanged
+// by this arm.
+func TestTokenExchangeService_Dispatch_MintTarget_RuntimeBound_StillRequiresConsent(t *testing.T) {
+	setup := newDispatchSetup(t)
+	ctx := context.Background()
+
+	agent, _ := setup.makeAgentClient(t, "agent")
+	runtimeClient, runtimeSecret := setup.createTEClient(t, []string{token.GrantTypeTokenExchange}, "")
+	setup.seedMintResourcePolicy(t, "unconsented-mcp", []string{"unconsented.read"}, resource.Policy{
+		Runtime: resource.RuntimePolicy{ClientIDs: []string{runtimeClient.ID}},
+	})
+	setup.seedUser(t, "user-iris")
+	// No consent grant seeded.
+
+	subjectClaims := identitySubjectClaims(agent.ID)
+	subjectClaims.Subject = "user-iris"
+	subjectToken := setup.mintSubjectToken(t, subjectClaims)
+
+	_, err := setup.svc.Exchange(ctx, input.TokenExchangeRequest{
+		SubjectToken:     subjectToken,
+		SubjectTokenType: token.TokenTypeAccessToken,
+		ClientID:         runtimeClient.ID,
+		ClientSecret:     runtimeSecret,
+		Resource:         "unconsented-mcp",
+		Scope:            "unconsented.read",
+	})
+	var cre *domain.ConsentRequiredError
+	if !errors.As(err, &cre) {
+		t.Fatalf("expected ConsentRequiredError, got %v", err)
 	}
 }
 
@@ -1175,10 +1386,10 @@ func TestDispatchBroker_BoundE_ScopeInsufficient_WrappedErrorPreservesCauseAndMi
 }
 
 // -------------------------------------------------------------------
-// Self-exchange (Mint dispatch). With allow_self_exchange on and the
-// requesting client matching the subject token's client_id, the
-// consent gate is bypassed (no third party); the operator allowlist
-// still applies.
+// Self-exchange (Mint dispatch): with allow_self_exchange on and the
+// requesting client == the subject token's client_id, consent is skipped.
+// The operator gate ran first and, with the empty allowlist seeded here,
+// restricts nothing — the first test pins that composed default on purpose.
 // -------------------------------------------------------------------
 
 func TestTokenExchangeService_Dispatch_MintTarget_SelfExchange_UserSubject_AllowsWithoutConsent(t *testing.T) {
@@ -1273,7 +1484,7 @@ func TestTokenExchangeService_Dispatch_MintTarget_SelfExchange_ClientCredentials
 // Inverse invariant: with AllowSelfExchange off, the consent gate
 // applies even when req.ClientID matches the subject's client_id.
 func TestTokenExchangeService_Dispatch_MintTarget_SelfExchange_Disabled_StillRequiresConsent(t *testing.T) {
-	setup := newDispatchSetupWithConfig(t, services.TokenExchangeConfig{
+	setup := newDispatchSetupWithConfig(t, output.TokenExchangeConfig{
 		AllowSelfExchange: false,
 		MaxChainDepth:     5,
 		TokenExpiry:       15 * time.Minute,
@@ -1309,6 +1520,8 @@ func TestTokenExchangeService_Dispatch_MintTarget_SelfExchange_Disabled_StillReq
 
 // The operator allowlist is orthogonal access control over which
 // clients may act on the resource; self-exchange does not bypass it.
+// It bites only when the list is non-empty — the counterpart to the
+// empty-allowlist test above, which passes with no authorization gate.
 func TestTokenExchangeService_Dispatch_MintTarget_SelfExchange_OperatorGate_StillEnforced(t *testing.T) {
 	setup := newDispatchSetup(t)
 	ctx := context.Background()
@@ -1380,7 +1593,7 @@ func TestDispatchMint_SubjectScopeCeiling_AllowsSubset(t *testing.T) {
 
 	agent, _ := setup.makeAgentClient(t, "agent-ceiling-mint-ok")
 	actor, actorSecret := setup.createTEClient(t, []string{token.GrantTypeTokenExchange}, "")
-	mintRes := setup.seedMintResource(t, "ceiling-ok-mcp", []string{"tasks.read", "tasks.write"}, nil)
+	mintRes := setup.seedMintResource(t, "ceiling-ok-mcp", []string{"tasks.read", "tasks.write"}, []string{actor.ID})
 	setup.seedUser(t, "user-ceiling-ok")
 	setup.seedConsentGrant(t, "user-ceiling-ok", agent.ID, mintRes.ID, []string{"tasks.read", "tasks.write"})
 
@@ -1451,7 +1664,7 @@ func TestDispatchMint_SubjectScopeCeiling_IdentityOnly_BypassesCeiling(t *testin
 
 	agent, _ := setup.makeAgentClient(t, "agent-identity-bypass")
 	actor, actorSecret := setup.createTEClient(t, []string{token.GrantTypeTokenExchange}, "")
-	mintRes := setup.seedMintResource(t, "identity-mcp", []string{"tasks.read", "tasks.write"}, nil)
+	mintRes := setup.seedMintResource(t, "identity-mcp", []string{"tasks.read", "tasks.write"}, []string{actor.ID})
 	setup.seedUser(t, "user-identity")
 	setup.seedConsentGrant(t, "user-identity", agent.ID, mintRes.ID, []string{"tasks.read", "tasks.write"})
 
@@ -1494,7 +1707,7 @@ func TestDispatchMint_ScopedSubject_NoConsent_StillReturnsConsentRequired(t *tes
 
 	agent, _ := setup.makeAgentClient(t, "scoped-noconsent")
 	actor, actorSecret := setup.createTEClient(t, []string{token.GrantTypeTokenExchange}, "")
-	setup.seedMintResource(t, "noconsent-mcp", []string{"tasks.read", "tasks.write"}, nil)
+	setup.seedMintResource(t, "noconsent-mcp", []string{"tasks.read", "tasks.write"}, []string{actor.ID})
 	setup.seedUser(t, "user-scoped-noconsent")
 	// Deliberately NO consent grant — even though the ceiling passes, the
 	// dispatcher must still raise ConsentRequiredError, not invalid_scope.

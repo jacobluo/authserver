@@ -13,12 +13,14 @@ import (
 	"github.com/go-jose/go-jose/v4/jwt"
 
 	"github.com/authplane/authserver/internal/adapters/keyfile"
+	"github.com/authplane/authserver/internal/adapters/static"
 	"github.com/authplane/authserver/internal/brokerproto"
 	"github.com/authplane/authserver/internal/crypto"
 	"github.com/authplane/authserver/internal/domain/client"
 	"github.com/authplane/authserver/internal/domain/token"
 	"github.com/authplane/authserver/internal/observability"
 	"github.com/authplane/authserver/internal/ports/input"
+	"github.com/authplane/authserver/internal/ports/output"
 	"github.com/authplane/authserver/internal/services"
 	"github.com/authplane/authserver/testdata"
 )
@@ -47,31 +49,31 @@ func newAITestSetup(t *testing.T) *aiTestSetup {
 		t.Fatalf("keyfile: %v", err)
 	}
 
-	jwksSvc := services.NewJWKSService(ks, "ES256", obs)
+	jwksSvc := services.NewJWKSService(ks, nil, "ES256", obs)
 	auditSvc := services.NewAuditService(stores.Audit, obs)
 
 	aiSvc := services.NewAgentIdentityService(stores.Client, obs)
 
 	ccSvc := services.NewClientCredentialsService(
 		stores.Client, stores.MachineToken, jwksSvc,
-		aiIssuer, time.Hour, obs, auditSvc,
+		staticIssuerForTest(aiIssuer), static.NewClientCredentialsConfigProvider(output.ClientCredentialsConfig{TokenExpiry: time.Hour}), obs, auditSvc,
 		nil,
 	)
 	ccSvc.WithAgentIdentity(aiSvc)
 
 	registry := services.NewResourceRegistry(stores.Resource, stores.BrokerProvider, obs)
-	mintIssuer := services.NewMintIssuer(jwksSvc, stores.Issuance, aiIssuer, obs)
+	mintIssuer := services.NewMintIssuer(jwksSvc, stores.Issuance, staticIssuerForTest(aiIssuer), obs)
 	bpReg := brokerproto.NewRegistry()
 	enc := &teTestEncryptor{}
 	brokerIssuer := services.NewBrokerIssuer(stores.BrokerGrant, enc, stores.Issuance, bpReg, obs, auditSvc)
 	teSvc := services.NewTokenExchangeService(
 		stores.Client, stores.MachineToken, jwksSvc, jwksSvc,
-		stores.Revocation, aiIssuer,
-		services.TokenExchangeConfig{
+		stores.Revocation, staticIssuerForTest(aiIssuer),
+		static.NewTokenExchangeConfigProvider(output.TokenExchangeConfig{
 			AllowSelfExchange: true,
 			MaxChainDepth:     10, // high limit — agent_identity truncation is separate at 8
 			TokenExpiry:       time.Hour,
-		},
+		}),
 		registry, stores.ConsentGrant, mintIssuer, brokerIssuer,
 		obs, auditSvc,
 	)
@@ -254,7 +256,6 @@ func TestAgentIdentity_Delegation_BuildsChain(t *testing.T) {
 	}
 
 	// Now do a self-exchange (delegation scenario with act claim).
-	// Mint a subject token with may_act allowing this agent.
 	subjectClaims := crypto.AccessTokenClaims{
 		Issuer:    aiIssuer,
 		Subject:   "user-1",
@@ -319,17 +320,22 @@ func TestAgentIdentity_ChainOrder_ShallowToDeep(t *testing.T) {
 
 	// Mint a subject token with an act claim from agent-a.
 	subjectClaims := crypto.AccessTokenClaims{
-		Issuer:    aiIssuer,
-		Subject:   "user-1",
-		Audience:  []string{aiIssuer},
-		ClientID:  agentA.ID,
+		Issuer:   aiIssuer,
+		Subject:  "user-1",
+		Audience: []string{aiIssuer},
+		// Self-exchange: agentB holds a token issued to itself that already
+		// carries an act claim naming agentA. Cross-client exchange on the
+		// resource-less path is no longer authorizable — may_act was its only
+		// gate and this server has had no writer for it since Inc 71 — and the
+		// ordering this test asserts comes from the act claim plus the acting
+		// client, which the self-exchange path builds identically.
+		ClientID:  agentB.ID,
 		Scope:     "read write",
 		JTI:       crypto.GenerateRandomString(16),
 		IssuedAt:  time.Now().Unix(),
 		Expiry:    time.Now().Add(time.Hour).Unix(),
 		NotBefore: time.Now().Unix(),
 		Act:       token.ActClaimToMap(&token.ActClaim{Sub: agentA.ID}),
-		MayAct:    map[string]interface{}{"sub": agentB.ID},
 	}
 	subjectToken, err := crypto.SignAccessToken(s.kp, subjectClaims)
 	if err != nil {

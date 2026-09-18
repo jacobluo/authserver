@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -28,34 +29,27 @@ import (
 	"github.com/authplane/authserver/internal/ports/output"
 )
 
-// TokenExchangeConfig holds configuration for the token exchange service.
-type TokenExchangeConfig struct {
-	AllowSelfExchange bool
-	MaxChainDepth     int
-	TokenExpiry       time.Duration
-}
-
 var _ input.TokenExchangePort = (*TokenExchangeService)(nil)
 
 // TokenExchangeService implements RFC 8693 token exchange.
 // Agent exchanges a token to act on behalf of a user (impersonation) or
 // alongside one (delegation). Full audit trail on delegation chain.
 type TokenExchangeService struct {
-	clients       output.ClientStore
-	machineTokens output.MachineTokenStore
-	jwksVerify    JWKSBuildProvider
-	jwksSign      JWKSSigningKeyProvider
-	revocation    output.RevocationStore
-	audit         AuditRecorder
-	issuer        string
-	config        TokenExchangeConfig
-	logger        *slog.Logger
-	tracer        trace.Tracer
-	metrics       *observability.Metrics
+	clients        output.ClientStore
+	machineTokens  output.MachineTokenStore
+	jwksVerify     JWKSBuildProvider
+	jwksSign       JWKSSigningKeyProvider
+	revocation     output.RevocationStore
+	audit          AuditRecorder
+	issuerProvider output.IssuerProvider
+	teConfig       output.TokenExchangeConfigProvider
+	logger         *slog.Logger
+	tracer         trace.Tracer
+	metrics        *observability.Metrics
 
 	// DPoP support (RFC 9449) — optional.
 	dpopStore  output.DPoPNonceStore
-	dpopConfig *DPoPConfig
+	dpopConfig output.DPoPConfigProvider
 
 	// Agent identity — optional. When set, attaches agent_id/agent_chain claims.
 	agentIdentity *AgentIdentityService
@@ -89,8 +83,8 @@ func NewTokenExchangeService(
 	jwksVerify JWKSBuildProvider,
 	jwksSign JWKSSigningKeyProvider,
 	revocation output.RevocationStore,
-	issuer string,
-	cfg TokenExchangeConfig,
+	issuerProvider output.IssuerProvider,
+	teConfig output.TokenExchangeConfigProvider,
 	registry *ResourceRegistry,
 	consentGrants output.ConsentGrantStore,
 	mintIssuer *MintIssuer,
@@ -98,29 +92,35 @@ func NewTokenExchangeService(
 	obs *observability.Provider,
 	auditRec AuditRecorder,
 ) *TokenExchangeService {
+	if issuerProvider == nil {
+		panic("services.NewTokenExchangeService: issuerProvider is required")
+	}
+	if teConfig == nil {
+		panic("NewTokenExchangeService: teConfig must not be nil")
+	}
 	return &TokenExchangeService{
-		clients:       clients,
-		machineTokens: machineTokens,
-		jwksVerify:    jwksVerify,
-		jwksSign:      jwksSign,
-		revocation:    revocation,
-		audit:         auditRec,
-		issuer:        issuer,
-		config:        cfg,
-		registry:      registry,
-		consentGrants: consentGrants,
-		mintIssuer:    mintIssuer,
-		brokerIssuer:  brokerIssuer,
-		logger:        obs.Logger.With("component", "token_exchange"),
-		tracer:        obs.Tracer,
-		metrics:       obs.Metrics,
+		clients:        clients,
+		machineTokens:  machineTokens,
+		jwksVerify:     jwksVerify,
+		jwksSign:       jwksSign,
+		revocation:     revocation,
+		audit:          auditRec,
+		issuerProvider: issuerProvider,
+		teConfig:       teConfig,
+		registry:       registry,
+		consentGrants:  consentGrants,
+		mintIssuer:     mintIssuer,
+		brokerIssuer:   brokerIssuer,
+		logger:         obs.Logger.With("component", "token_exchange"),
+		tracer:         obs.Tracer,
+		metrics:        obs.Metrics,
 	}
 }
 
 // WithDPoP enables DPoP proof-of-possession support on the token exchange service.
-func (s *TokenExchangeService) WithDPoP(store output.DPoPNonceStore, cfg DPoPConfig) {
+func (s *TokenExchangeService) WithDPoP(store output.DPoPNonceStore, cfg output.DPoPConfigProvider) {
 	s.dpopStore = store
-	s.dpopConfig = &cfg
+	s.dpopConfig = cfg
 }
 
 // WithAgentIdentity enables agent identity claim attachment.
@@ -181,8 +181,21 @@ func (s *TokenExchangeService) Exchange(ctx context.Context, req input.TokenExch
 		return nil, domain.ErrInvalidGrant
 	}
 
-	// 4. Validate + decode subject_token.
-	subjectClaims, err := s.verifyToken(ctx, span, req.SubjectToken, "subject_token")
+	// 4. Resolve issuer once (after all input validation) and decode subject_token.
+	issuer, err := s.issuerProvider.Issuer(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("resolve issuer: %w", err)
+	}
+
+	// 4a. Resolve per-request token-exchange config.
+	teCfg, err := s.teConfig.Config(ctx)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, fmt.Errorf("resolve token exchange config: %w", err)
+	}
+
+	subjectClaims, err := s.verifyToken(ctx, span, issuer, req.SubjectToken, "subject_token")
 	if err != nil {
 		s.recordDenied(ctx, req.ClientID, "invalid_subject_token")
 		return nil, err
@@ -192,7 +205,7 @@ func (s *TokenExchangeService) Exchange(ctx context.Context, req input.TokenExch
 	// Note: we do NOT check audience here. Resource-scoped tokens have
 	// aud=[resource_url], not aud=[issuer]. The JWT signature verification
 	// in step 4 already proves the token was issued by this AS.
-	if subjectClaims.Issuer != s.issuer {
+	if subjectClaims.Issuer != issuer {
 		span.RecordError(domain.ErrInvalidGrant)
 		span.SetStatus(codes.Error, "subject token issuer does not match this AS")
 		s.recordDenied(ctx, req.ClientID, "invalid_issuer")
@@ -215,7 +228,7 @@ func (s *TokenExchangeService) Exchange(ctx context.Context, req input.TokenExch
 		target, resolveErr := s.registry.Resolve(ctx, req.Resource)
 		switch {
 		case resolveErr == nil:
-			return s.handleViaRegistry(ctx, span, start, req, subjectClaims, target)
+			return s.handleViaRegistry(ctx, span, start, req, issuer, subjectClaims, target, teCfg)
 		case errors.Is(resolveErr, domain.ErrResourceNotFound):
 			span.RecordError(resolveErr)
 			span.SetStatus(codes.Error, "resource not found in unified registry")
@@ -242,7 +255,7 @@ func (s *TokenExchangeService) Exchange(ctx context.Context, req input.TokenExch
 			s.recordDenied(ctx, req.ClientID, "invalid_request")
 			return nil, domain.ErrInvalidGrant
 		}
-		ac, actorErr := s.verifyToken(ctx, span, req.ActorToken, "actor_token")
+		ac, actorErr := s.verifyToken(ctx, span, issuer, req.ActorToken, "actor_token")
 		if actorErr != nil {
 			s.recordDenied(ctx, req.ClientID, "invalid_actor_token")
 			return nil, actorErr
@@ -277,7 +290,7 @@ func (s *TokenExchangeService) Exchange(ctx context.Context, req input.TokenExch
 	}
 
 	// 8. Policy check: is this exchange authorized?
-	if policyErr := s.checkPolicy(ctx, span, req.ClientID, subjectClaims, actorClaims); policyErr != nil {
+	if policyErr := s.checkPolicy(ctx, span, req.ClientID, subjectClaims, actorClaims, teCfg); policyErr != nil {
 		s.recordDenied(ctx, req.ClientID, "policy_denied")
 		return nil, policyErr
 	}
@@ -308,7 +321,7 @@ func (s *TokenExchangeService) Exchange(ctx context.Context, req input.TokenExch
 			Extras: map[string]interface{}{"actor_type": actorType},
 		}
 	}
-	if resultingAct != nil && resultingAct.Depth() > s.config.MaxChainDepth {
+	if resultingAct != nil && resultingAct.Depth() > teCfg.MaxChainDepth {
 		span.RecordError(domain.ErrTokenExchangeChainTooDeep)
 		span.SetStatus(codes.Error, "delegation chain too deep")
 		s.recordDenied(ctx, req.ClientID, "chain_too_deep")
@@ -328,7 +341,7 @@ func (s *TokenExchangeService) Exchange(ctx context.Context, req input.TokenExch
 
 	// 11. Build the issued token claims.
 	now := time.Now().UTC()
-	expiry := now.Add(s.config.TokenExpiry)
+	expiry := now.Add(teCfg.TokenExpiry)
 	jti := crypto.GenerateRandomString(16)
 
 	sk, err := s.jwksSign.GetSigningKey(ctx)
@@ -344,12 +357,12 @@ func (s *TokenExchangeService) Exchange(ctx context.Context, req input.TokenExch
 		if len(subjectClaims.Audience) > 0 {
 			aud = subjectClaims.Audience
 		} else {
-			aud = []string{s.issuer}
+			aud = []string{issuer}
 		}
 	}
 
 	claims := crypto.AccessTokenClaims{
-		Issuer:    s.issuer,
+		Issuer:    issuer,
 		Subject:   subjectClaims.Subject, // sub is always from the subject token
 		Audience:  aud,
 		ClientID:  req.ClientID,
@@ -471,7 +484,7 @@ func (s *TokenExchangeService) Exchange(ctx context.Context, req input.TokenExch
 		AccessToken:     accessToken,
 		IssuedTokenType: token.TokenTypeAccessToken,
 		TokenType:       tokenType,
-		ExpiresIn:       int(s.config.TokenExpiry.Seconds()),
+		ExpiresIn:       int(teCfg.TokenExpiry.Seconds()),
 		Scope:           effectiveScopes.String(),
 	}, nil
 }
@@ -513,7 +526,9 @@ func (s *TokenExchangeService) authenticateClient(ctx context.Context, span trac
 }
 
 // verifyToken parses, verifies, and validates a JWT token (subject or actor).
-func (s *TokenExchangeService) verifyToken(ctx context.Context, span trace.Span, rawToken, label string) (*crypto.AccessTokenClaims, error) {
+// issuer is resolved once by the caller (Exchange or dispatchMint) and passed
+// here to avoid redundant resolution on every token verification.
+func (s *TokenExchangeService) verifyToken(ctx context.Context, span trace.Span, issuer, rawToken, label string) (*crypto.AccessTokenClaims, error) {
 	jwks, err := s.jwksVerify.BuildJWKS(ctx)
 	if err != nil {
 		span.RecordError(err)
@@ -521,7 +536,7 @@ func (s *TokenExchangeService) verifyToken(ctx context.Context, span trace.Span,
 		return nil, fmt.Errorf("build JWKS: %w", err)
 	}
 
-	claims, err := crypto.VerifyAccessTokenWithIssuer(rawToken, jwks, s.issuer)
+	claims, err := crypto.VerifyAccessTokenWithIssuer(rawToken, jwks, issuer)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, fmt.Sprintf("%s verification failed", label))
@@ -563,16 +578,22 @@ func (s *TokenExchangeService) checkRevocation(ctx context.Context, span trace.S
 
 // checkPolicy verifies that the requesting client is authorized to exchange this token.
 //
-// The unified-dispatch path does not call into checkPolicy — its
-// operator gate uses target.Policy.Exchange.AllowedClientIDs from the resource
-// row. checkPolicy survives only for the legacy mint fall-through used when
-// the requested resource has no row in the unified table yet. The
-// cross-client config + DB allowlist seams are retired; the only
-// cross-client authorization left here is the per-token may_act claim.
-func (s *TokenExchangeService) checkPolicy(_ context.Context, span trace.Span, requestingClientID string, subjectClaims, _ *crypto.AccessTokenClaims) error {
+// The unified-dispatch path does not call into checkPolicy — its operator gate
+// uses target.Policy.Exchange.AllowedClientIDs from the resource row.
+// checkPolicy survives only for the legacy mint fall-through used when the
+// requested resource has no row in the unified table yet.
+//
+// Self-exchange is the only thing authorizable here. Cross-client exchange on
+// this path is refused outright, because there is nothing left on it that could
+// authorize one: the config and DB allowlist seams were retired when the
+// authorization seam moved to per-resource policy, and the per-token may_act
+// claim went with the writer that produced it. Naming a resource — which puts
+// the request on the unified path and its operator gate — is how a cross-client
+// exchange is authorized now.
+func (s *TokenExchangeService) checkPolicy(_ context.Context, span trace.Span, requestingClientID string, subjectClaims, _ *crypto.AccessTokenClaims, teCfg output.TokenExchangeConfig) error {
 	// Self-exchange: client is exchanging its own token.
 	if requestingClientID == subjectClaims.ClientID {
-		if s.config.AllowSelfExchange {
+		if teCfg.AllowSelfExchange {
 			return nil
 		}
 		span.RecordError(domain.ErrTokenExchangeNotAuthorized)
@@ -580,15 +601,8 @@ func (s *TokenExchangeService) checkPolicy(_ context.Context, span trace.Span, r
 		return domain.ErrTokenExchangeNotAuthorized
 	}
 
-	// Cross-client exchange: check may_act claim in subject token.
-	if subjectClaims.MayAct != nil {
-		if actorSub, ok := subjectClaims.MayAct["sub"].(string); ok && actorSub == requestingClientID {
-			return nil
-		}
-	}
-
 	span.RecordError(domain.ErrTokenExchangeNotAuthorized)
-	span.SetStatus(codes.Error, "cross-client exchange not authorized")
+	span.SetStatus(codes.Error, "cross-client exchange not authorized on the resource-less path")
 	return domain.ErrTokenExchangeNotAuthorized
 }
 
@@ -603,14 +617,29 @@ func (s *TokenExchangeService) validateDPoP(ctx context.Context, span trace.Span
 		return "", nil
 	}
 
-	result, err := crypto.ValidateProof(proof, method, reqURL, "", "", s.dpopConfig.ProofLifetime)
+	dpopCfg, err := s.dpopConfig.Config(ctx)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return "", fmt.Errorf("resolve dpop config: %w", err)
+	}
+
+	// When the resolved config reports DPoP disabled, ignore the proof and
+	// issue a bearer token (no sender-constraining). The default build only
+	// wires this provider when DPoP is enabled, so this is byte-identical
+	// there; a substitute provider may toggle it per request.
+	if !dpopCfg.Enabled {
+		return "", nil
+	}
+
+	result, err := crypto.ValidateProof(proof, method, reqURL, "", "", dpopCfg.ProofLifetime)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "DPoP proof validation failed")
 		return "", err
 	}
 
-	if s.dpopConfig.RequireNonce {
+	if dpopCfg.RequireNonce {
 		if result.Nonce == "" {
 			return "", domain.ErrDPoPNonceRequired
 		}
@@ -619,7 +648,7 @@ func (s *TokenExchangeService) validateDPoP(ctx context.Context, span trace.Span
 		}
 	}
 
-	jtiExpiry := time.Now().Add(s.dpopConfig.ProofLifetime * 2)
+	jtiExpiry := time.Now().Add(dpopCfg.ProofLifetime * 2)
 	if err := s.dpopStore.ConsumeJTI(ctx, result.JTI, jtiExpiry); err != nil {
 		return "", err
 	}
@@ -629,16 +658,23 @@ func (s *TokenExchangeService) validateDPoP(ctx context.Context, span trace.Span
 
 // recordDenied increments the denied counter with a reason label.
 func (s *TokenExchangeService) recordDenied(ctx context.Context, clientID, reason string) {
-	if s.metrics != nil && s.metrics.TokenExchangeDenied != nil {
-		s.metrics.TokenExchangeDenied.Add(ctx, 1, otelmetric.WithAttributes(
-			attribute.String("reason", reason),
-		))
-	}
+	s.countDenied(ctx, reason)
 	if s.audit != nil {
 		s.audit.Record(ctx, audit.NewEvent(
 			audit.ActionTokenExchangeDenied,
 			clientID, clientID, "",
 			fmt.Sprintf("reason=%s", reason),
+		))
+	}
+}
+
+// countDenied increments the denial metric without emitting an audit event.
+// Callers that emit their own, richer denial event use this so a single denial
+// produces a single audit row.
+func (s *TokenExchangeService) countDenied(ctx context.Context, reason string) {
+	if s.metrics != nil && s.metrics.TokenExchangeDenied != nil {
+		s.metrics.TokenExchangeDenied.Add(ctx, 1, otelmetric.WithAttributes(
+			attribute.String("reason", reason),
 		))
 	}
 }
@@ -663,8 +699,10 @@ func (s *TokenExchangeService) handleViaRegistry(
 	span trace.Span,
 	start time.Time,
 	req input.TokenExchangeRequest,
+	issuer string,
 	subjectClaims *crypto.AccessTokenClaims,
 	target *resource.Resource,
+	teCfg output.TokenExchangeConfig,
 ) (*input.TokenExchangeResponse, error) {
 	span.SetAttributes(
 		attribute.String("resource_id", target.ID),
@@ -708,7 +746,7 @@ func (s *TokenExchangeService) handleViaRegistry(
 
 	switch target.BackendKind {
 	case resource.BackendMint:
-		return s.dispatchMint(ctx, span, start, req, subjectClaims, target)
+		return s.dispatchMint(ctx, span, start, req, issuer, subjectClaims, target, teCfg)
 	case resource.BackendBroker:
 		return s.dispatchBroker(ctx, span, start, req, subjectClaims, target)
 	default:
@@ -805,20 +843,35 @@ func (s *TokenExchangeService) validateAgainstCatalog(scopeStr string, target *r
 
 // dispatchMint runs the unified Mint flow:
 //
-//  1. fronted-path detection — when a (source, target) fronting link
+//  1. operator gate against target.Policy.Exchange.AllowedClientIDs.
+//     Runs first (matching dispatchBroker) so operator policy fails fast
+//     without consulting fronting or consent state. An empty allowlist
+//     admits any client.
+//  2. fronted-path detection — when a (source, target) fronting link
 //     exists AND target is Mint, the operator declaration replaces
 //     the user-consent gate. Skipped otherwise; direct path proceeds.
-//  2. either the fronted scope-coverage gate (target scopes mappable
-//     by the link, source scopes covered by subject_token) OR the
-//     direct user-consent gate against consent_grants (user, agent,
-//     target).
-//  3. operator gate against target.Policy.Exchange.AllowedClientIDs.
-//  4. pre-issuance checks: actor token verification, chain depth, DPoP.
-//  5. act-chain build. Direct path keeps legacy shape; fronted path
-//     applies Option β (issued client_id = source.Slug; agent at act.act).
-//  6. agent identity attachment.
-//  7. MintIssuer.Issue → JWT + issuances row.
-//  8. audit + metrics + RFC 8693 response shape (audit detail and the
+//  3. fronted scope-coverage gate, fronted path only: every requested
+//     target scope must be mappable by the link and the subject_token
+//     must already cover the source scope the reverse-walk derives for
+//     it. On a multi-source map that is the lexicographically first
+//     source and only that one — see requiredSourceScopesForTargets;
+//     the fronted-broker path does NOT gate the same way.
+//  4. subject-scope ceiling (ADR-002), direct path only — the fronted
+//     path bounded its scopes in step 3. Applies to self-exchange too.
+//  5. cross-client delegation gate, then the user-consent gate against
+//     consent_grants (user, agent, target). Both are skipped on the
+//     fronted path and on a self-exchange. The delegation gate is
+//     default-deny: a client presenting another client's token must be
+//     named in target.Policy.Exchange.AllowedClientIDs, or be one of
+//     target.Policy.Runtime.ClientIDs and so be the target itself.
+//  6. actor token verification, when an actor_token is present.
+//  7. act-chain build + chain-depth check. Direct path keeps legacy
+//     shape; fronted path applies Option β (issued client_id =
+//     source.Slug; agent at act.act).
+//  8. DPoP proof — fresh proof, else cnf.jkt inherited from the subject.
+//  9. agent identity attachment.
+//  10. MintIssuer.Issue → JWT + issuances row.
+//  11. audit + metrics + RFC 8693 response shape (audit detail and the
 //     TokenExchangeTotal counter both carry chain_kind ∈ {direct,
 //     fronted} and the source/target labels).
 //
@@ -831,8 +884,10 @@ func (s *TokenExchangeService) dispatchMint(
 	span trace.Span,
 	start time.Time,
 	req input.TokenExchangeRequest,
+	issuer string,
 	subjectClaims *crypto.AccessTokenClaims,
 	target *resource.Resource,
+	teCfg output.TokenExchangeConfig,
 ) (*input.TokenExchangeResponse, error) {
 	if s.mintIssuer == nil {
 		err := fmt.Errorf("token exchange: mint issuer not wired for unified Mint dispatch")
@@ -846,7 +901,7 @@ func (s *TokenExchangeService) dispatchMint(
 
 	agentClientID := subjectClaims.ClientID
 
-	// Operator gate. Empty allowlist = any consented client may act
+	// Operator gate. Empty allowlist = any client may act
 	// (Brief §1). When non-empty, req.ClientID must appear in the list.
 	// Runs first (matching dispatchBroker) so operator policy fails fast
 	// without consulting fronting / consent state — both for fronted and
@@ -876,24 +931,24 @@ func (s *TokenExchangeService) dispatchMint(
 		frontedLink   *resource.FrontingLink
 	)
 	if source := s.resolveSourceForFronting(ctx, subjectClaims.Audience); source != nil && source.Slug != target.Slug {
-		link, err := s.fronting.Get(ctx, source.Slug, target.Slug)
+		link, getErr := s.fronting.Get(ctx, source.Slug, target.Slug)
 		switch {
-		case err == nil && target.IsMint():
+		case getErr == nil && target.IsMint():
 			frontedSource = source
 			frontedLink = link
-		case err == nil && !target.IsMint():
+		case getErr == nil && !target.IsMint():
 			s.logger.WarnContext(ctx, "fronting link exists but target is not Mint — ignored",
 				"source_slug", source.Slug,
 				"target_slug", target.Slug,
 				"target_kind", string(target.BackendKind),
 			)
-		case errors.Is(err, domain.ErrFrontingLinkNotFound):
+		case errors.Is(getErr, domain.ErrFrontingLinkNotFound):
 			// No link — direct path proceeds.
 		default:
-			span.RecordError(err)
+			span.RecordError(getErr)
 			span.SetStatus(codes.Error, "fronting link lookup failed")
 			s.recordDenied(ctx, req.ClientID, "fronting_lookup_failed")
-			return nil, fmt.Errorf("fronting lookup: %w", err)
+			return nil, fmt.Errorf("fronting lookup: %w", getErr)
 		}
 	}
 
@@ -903,6 +958,12 @@ func (s *TokenExchangeService) dispatchMint(
 	// and the subject token MUST already cover the source-side scopes the
 	// reverse-walk derives. The operator declaration is the consent
 	// surrogate; no consent_grants row is consulted.
+	//
+	// "the scopes the reverse-walk derives" is load-bearing: on a
+	// multi-source map that is one specific source key per target, not
+	// any covering one. dispatchFrontedBroker's equivalent gate is an
+	// any-of check, so the two fronted paths can disagree on the same
+	// link.
 	if frontedLink != nil {
 		requestedTargets := strings.Fields(req.Scope)
 		requiredSources, unmapped := requiredSourceScopesForTargets(frontedLink.ScopeMap, requestedTargets)
@@ -949,16 +1010,79 @@ func (s *TokenExchangeService) dispatchMint(
 		}
 	}
 
-	// Self-exchange short-circuits the consent gate (no third party
-	// involved); the operator allowlist below still applies.
-	isSelfExchange := s.config.AllowSelfExchange && req.ClientID == subjectClaims.ClientID
+	// Self-exchange skips the consent gate (no third party involved): the
+	// caller already holds a token issued to it and the subject-scope
+	// ceiling only lets scope narrow, so the exchange grants nothing the
+	// caller did not already have.
+	isSelfExchange := teCfg.AllowSelfExchange && req.ClientID == subjectClaims.ClientID
 	if frontedLink == nil && !isSelfExchange {
-		grant, err := s.consentGrants.Get(ctx, subjectClaims.Subject, agentClientID, target.ID)
-		if err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
+		// Cross-client delegation gate. The consent lookup below is keyed
+		// on agentClientID — the subject token's client, the agent the
+		// user actually authorized — and not on the client presenting the
+		// exchange. That is deliberate and is what makes a delegation
+		// chain possible at all: agent 2 never faces the user, so it can
+		// only inherit agent 1's grant.
+		//
+		// The inheritance has to be authorized by someone, though, and on
+		// the direct path the only party who can authorize it is the
+		// operator. Without this gate any client holding a token minted
+		// for another client rides that client's consent, which is the
+		// whole of the third party's authorization. An operator who never
+		// named the delegate never authorized the delegation, so an empty
+		// allowlist denies here — unlike the operator gate above, where
+		// empty stays permissive because a same-client exchange carries
+		// its own authorization.
+		//
+		// Fronted paths are excluded by frontedLink == nil above: they
+		// consult no consent grant at all, because the operator's fronting
+		// link is itself the explicit declaration this gate looks for.
+		//
+		// Two operator declarations satisfy it, and they answer different
+		// questions. Exchange.AllowedClientIDs names a third party the
+		// operator is willing to hand a target-audienced token to.
+		// Runtime.ClientIDs says the caller *is* the target — it is the
+		// same predicate introspection calls resourceAuthorizes — so there
+		// is no third party to name: the token's audience and its holder
+		// are the resource the user already consented to reach. Requiring
+		// an Exchange entry as well would mean listing a resource as its
+		// own permitted delegate, which is why the common shape (a service
+		// exchanging a user's web-app token for a token audienced to
+		// itself) needed configuration to do nothing.
+		//
+		// The Runtime arm only widens this gate. A non-empty
+		// Exchange.AllowedClientIDs is an explicit restriction and still
+		// wins, because the operator gate at the top of dispatchMint has
+		// already rejected anyone missing from it before control reaches
+		// here.
+		//
+		// Membership is read from policy.runtime.client_ids alone. The
+		// retired slug==client_id convention that resolveActorMCP and
+		// resourceAuthorizes still accept is deliberately not honored
+		// here: a deployment on that convention keeps the Exchange path it
+		// has today, and a gate added now should not extend the reach of a
+		// convention already scheduled for removal.
+		actsAsTarget := slices.Contains(target.Policy.Runtime.ClientIDs, req.ClientID)
+		if req.ClientID != agentClientID &&
+			!slices.Contains(target.Policy.Exchange.AllowedClientIDs, req.ClientID) &&
+			!actsAsTarget {
+			span.RecordError(domain.ErrTokenExchangeNotAuthorized)
+			span.SetStatus(codes.Error, "cross-client exchange not authorized by operator")
+			s.logger.InfoContext(ctx, "mint dispatch denied: cross-client exchange requires the acting client in the target's policy.exchange.allowed_client_ids, or in its policy.runtime.client_ids if the client is that resource",
+				"client_id", req.ClientID,
+				"agent_client_id", agentClientID,
+				"sub", subjectClaims.Subject,
+				"resource_slug", target.Slug,
+			)
+			s.recordDenied(ctx, req.ClientID, "cross_client_not_authorized")
+			return nil, domain.ErrTokenExchangeNotAuthorized
+		}
+
+		grant, getErr := s.consentGrants.Get(ctx, subjectClaims.Subject, agentClientID, target.ID)
+		if getErr != nil {
+			span.RecordError(getErr)
+			span.SetStatus(codes.Error, getErr.Error())
 			s.recordDenied(ctx, req.ClientID, "consent_lookup_failed")
-			return nil, fmt.Errorf("look up consent grant: %w", err)
+			return nil, fmt.Errorf("look up consent grant: %w", getErr)
 		}
 		if grant == nil {
 			span.SetStatus(codes.Error, "consent_required")
@@ -995,7 +1119,7 @@ func (s *TokenExchangeService) dispatchMint(
 	}
 	requestedScopes := strings.Fields(req.Scope)
 
-	// 3. Validate actor_token if present.
+	// 6. Validate actor_token if present.
 	var actorClaims *crypto.AccessTokenClaims
 	if req.ActorToken != "" {
 		if req.ActorTokenType != "" && !token.IsValidSubjectTokenType(req.ActorTokenType) {
@@ -1003,7 +1127,7 @@ func (s *TokenExchangeService) dispatchMint(
 			s.recordDenied(ctx, req.ClientID, "invalid_request")
 			return nil, domain.ErrInvalidGrant
 		}
-		ac, actorErr := s.verifyToken(ctx, span, req.ActorToken, "actor_token")
+		ac, actorErr := s.verifyToken(ctx, span, issuer, req.ActorToken, "actor_token")
 		if actorErr != nil {
 			s.recordDenied(ctx, req.ClientID, "invalid_actor_token")
 			return nil, actorErr
@@ -1011,7 +1135,7 @@ func (s *TokenExchangeService) dispatchMint(
 		actorClaims = ac
 	}
 
-	// 4. Resulting act-chain. Same shape as the legacy path so the JWT
+	// 7. Resulting act-chain. Same shape as the legacy path so the JWT
 	// 'act' claim remains byte-identical for delegation flows. The
 	// fronted branch overrides this: under Option β the issued
 	// JWT carries client_id = source resource's slug, and the previous
@@ -1076,14 +1200,14 @@ func (s *TokenExchangeService) dispatchMint(
 	default:
 		resultingAct = existingAct
 	}
-	if resultingAct != nil && resultingAct.Depth() > s.config.MaxChainDepth {
+	if resultingAct != nil && resultingAct.Depth() > teCfg.MaxChainDepth {
 		span.RecordError(domain.ErrTokenExchangeChainTooDeep)
 		span.SetStatus(codes.Error, "delegation chain too deep")
 		s.recordDenied(ctx, req.ClientID, "chain_too_deep")
 		return nil, domain.ErrTokenExchangeChainTooDeep
 	}
 
-	// 5. DPoP proof.
+	// 8. DPoP proof.
 	var dpopJKT string
 	if req.DPoPProof != "" {
 		jkt, dpopErr := s.validateDPoP(ctx, span, req.DPoPProof, req.HTTPMethod, req.HTTPURL)
@@ -1101,7 +1225,7 @@ func (s *TokenExchangeService) dispatchMint(
 		}
 	}
 
-	// 6. Agent identity. Run AttachClaims against a throwaway claims
+	// 9. Agent identity. Run AttachClaims against a throwaway claims
 	// struct so we can lift AgentID/AgentChain onto the IssueRequest
 	// without giving MintIssuer a backreference to AgentIdentityService.
 	var actMap map[string]interface{}
@@ -1115,7 +1239,7 @@ func (s *TokenExchangeService) dispatchMint(
 	}
 
 	now := time.Now().UTC()
-	expiry := now.Add(s.config.TokenExpiry)
+	expiry := now.Add(teCfg.TokenExpiry)
 	issueReq := IssueRequest{
 		Resource:      target,
 		Provider:      nil,
@@ -1198,17 +1322,27 @@ func (s *TokenExchangeService) dispatchMint(
 //
 //  1. reject actor_token (broker tokens are upstream-shaped — delegation
 //     does not make sense over an external provider's bearer).
-//  2. operator gate against target.Policy.Exchange.AllowedClientIDs
-//  3. agent-attestation gate: look up the actor MCP as a Mint resource
-//     by req.ClientID and verify a consent_grants row exists for
-//     (user, agent, actorMCP).
-//  4. resolve the BrokerProvider via registry.GetWithProvider.
-//  5. attach agent identity to the IssueRequest (for audit row only —
+//  2. operator gate against target.Policy.Exchange.AllowedClientIDs.
+//     An empty allowlist admits any client.
+//  3. fronted-broker detection — when the subject token's aud resolves to
+//     a Mint source distinct from the target, dispatch delegates to
+//     dispatchFrontedBroker (gated on the link's scope_map) and none of
+//     the steps below run, the agent-attestation gate included. A
+//     resolvable source with no fronting_links row fails closed with
+//     FrontingLinkMissingError rather than falling through.
+//  4. subject-scope ceiling (ADR-002), direct-broker only.
+//  5. agent-attestation gate: resolve the actor MCP as a Mint resource
+//     via policy.runtime.client_ids and verify a consent_grants row
+//     exists for (user, agent, actorMCP) covering every requested
+//     scope (bound-C).
+//  6. resolve the BrokerProvider via registry.GetWithProvider.
+//  7. DPoP proof.
+//  8. attach agent identity to the IssueRequest (for audit row only —
 //     broker tokens cannot carry these claims on the wire).
-//  6. BrokerIssuer.Issue → upstream-narrowed token + issuances row.
-//  7. on ConsentRequiredError, wrap with ProviderSlug + ResourceSlug so
+//  9. BrokerIssuer.Issue → upstream-narrowed token + issuances row.
+//  10. on ConsentRequiredError, wrap with ProviderSlug + ResourceSlug so
 //     the handler can render an upstream-aware connect_url.
-//  8. audit + metrics + RFC 8693 response shape.
+//  11. audit + metrics + RFC 8693 response shape.
 func (s *TokenExchangeService) dispatchBroker(
 	ctx context.Context,
 	span trace.Span,
@@ -1251,8 +1385,8 @@ func (s *TokenExchangeService) dispatchBroker(
 		return nil, domain.ErrTokenExchangeNotAuthorized
 	}
 
-	// fronted-broker detection. Mirrors dispatchMint's fronted-path
-	// detection (token_exchange.go:769-790). When a (source, target) fronting
+	// 3. Fronted-broker detection. Mirrors dispatchMint's fronted-path
+	// detection above. When a (source, target) fronting
 	// link exists, the operator declaration replaces the AS-side third-bound
 	// agent-attestation gate; we delegate to dispatchFrontedBroker which
 	// translates scopes via link.ScopeMap and calls BrokerIssuer.Issue.
@@ -1298,7 +1432,7 @@ func (s *TokenExchangeService) dispatchBroker(
 		}
 	}
 
-	// Hybrid subject-scope ceiling (ADR-002). Direct-broker only — fronted
+	// 4. Hybrid subject-scope ceiling (ADR-002). Direct-broker only — fronted
 	// broker dispatch returned above and runs its own source-coverage gate
 	// against the link's scope_map in source-side names. Direct broker uses
 	// agent-attestation (below) as the operative authority and stacks this
@@ -1307,7 +1441,7 @@ func (s *TokenExchangeService) dispatchBroker(
 		return nil, scopeErr
 	}
 
-	// 3. Agent-attestation gate. identify which Resource the
+	// 5. Agent-attestation gate. identify which Resource the
 	// authenticated client represents at runtime via the explicit
 	// policy.runtime.client_ids linkage. The pre- lookup string-
 	// matched req.ClientID against Resource.Slug ("operator hygiene
@@ -1380,7 +1514,7 @@ func (s *TokenExchangeService) dispatchBroker(
 		}
 	}
 
-	// 3b. bound-C: the agent-attestation grant must cover every
+	// 5b. bound-C: the agent-attestation grant must cover every
 	// requested fine scope. Without this check, an agent attested for
 	// [repo] could request [repo, admin:org] and ride the broker_grants
 	// ceiling all the way to the upstream — the over-grant was
@@ -1410,7 +1544,7 @@ func (s *TokenExchangeService) dispatchBroker(
 		}
 	}
 
-	// 4. Resolve provider for the broker resource.
+	// 6. Resolve provider for the broker resource.
 	_, provider, err := s.registry.GetWithProvider(ctx, target.ID)
 	if err != nil {
 		span.RecordError(err)
@@ -1426,7 +1560,7 @@ func (s *TokenExchangeService) dispatchBroker(
 		return nil, missingErr
 	}
 
-	// 5. DPoP proof — validated for replay even though broker tokens are
+	// 7. DPoP proof — validated for replay even though broker tokens are
 	// not AS-bound on the wire. JKT goes onto the issuance audit row.
 	var dpopJKT string
 	if req.DPoPProof != "" {
@@ -1438,7 +1572,7 @@ func (s *TokenExchangeService) dispatchBroker(
 		dpopJKT = jkt
 	}
 
-	// 6. Agent identity. Same throwaway-claims pattern as Mint dispatch;
+	// 8. Agent identity. Same throwaway-claims pattern as Mint dispatch;
 	// for Broker the act chain is intentionally nil (no delegation).
 	agentClaims, err := s.extractAgentIdentity(ctx, span, req.ClientID, nil)
 	if err != nil {
@@ -1555,7 +1689,6 @@ func (s *TokenExchangeService) dispatchFrontedBroker(
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "broker provider lookup failed")
-		s.recordDenied(ctx, req.ClientID, "provider_lookup_failed")
 		s.emitFrontedBrokerDenialAudit(ctx, req, subjectClaims, source, target, "provider_lookup_failed")
 		return nil, fmt.Errorf("resolve broker provider: %w", err)
 	}
@@ -1563,7 +1696,6 @@ func (s *TokenExchangeService) dispatchFrontedBroker(
 		missingErr := fmt.Errorf("broker resource %q has no provider row", target.Slug)
 		span.RecordError(missingErr)
 		span.SetStatus(codes.Error, "broker provider missing for resource")
-		s.recordDenied(ctx, req.ClientID, "provider_missing")
 		s.emitFrontedBrokerDenialAudit(ctx, req, subjectClaims, source, target, "provider_missing")
 		return nil, missingErr
 	}
@@ -1585,7 +1717,6 @@ func (s *TokenExchangeService) dispatchFrontedBroker(
 		)
 		span.RecordError(fmt.Errorf("scope unmapped: %v", unmapped))
 		span.SetStatus(codes.Error, "consent_required:scope_unmapped")
-		s.recordDenied(ctx, req.ClientID, "scope_unmapped")
 		s.emitFrontedBrokerDenialAudit(ctx, req, subjectClaims, source, target, "scope_unmapped")
 		return nil, &domain.ConsentRequiredError{
 			ProviderSlug: provider.Slug,
@@ -1602,7 +1733,6 @@ func (s *TokenExchangeService) dispatchFrontedBroker(
 		)
 		span.RecordError(fmt.Errorf("subject scope insufficient for targets: %v", missingCoverage))
 		span.SetStatus(codes.Error, "consent_required:subject_scope_insufficient")
-		s.recordDenied(ctx, req.ClientID, "subject_scope_insufficient")
 		s.emitFrontedBrokerDenialAudit(ctx, req, subjectClaims, source, target, "subject_scope_insufficient")
 		return nil, &domain.ConsentRequiredError{
 			ProviderSlug: provider.Slug,
@@ -1617,7 +1747,6 @@ func (s *TokenExchangeService) dispatchFrontedBroker(
 	agentClaims, err := s.extractAgentIdentity(ctx, span, req.ClientID, nil)
 	if err != nil {
 		span.SetStatus(codes.Error, "agent identity failed")
-		s.recordDenied(ctx, req.ClientID, "agent_identity_failed")
 		s.emitFrontedBrokerDenialAudit(ctx, req, subjectClaims, source, target, "agent_identity_failed")
 		return nil, err
 	}
@@ -1634,7 +1763,6 @@ func (s *TokenExchangeService) dispatchFrontedBroker(
 	if req.DPoPProof != "" {
 		jkt, dpopErr := s.validateDPoP(ctx, span, req.DPoPProof, req.HTTPMethod, req.HTTPURL)
 		if dpopErr != nil {
-			s.recordDenied(ctx, req.ClientID, "dpop_invalid")
 			s.emitFrontedBrokerDenialAudit(ctx, req, subjectClaims, source, target, "dpop_invalid")
 			return nil, dpopErr
 		}
@@ -1659,7 +1787,9 @@ func (s *TokenExchangeService) dispatchFrontedBroker(
 		if errors.As(err, &cre) {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, "consent_required")
-			s.recordDenied(ctx, req.ClientID, "broker_consent_required")
+			// No countDenied here: emitFrontedBrokerDenialAudit counts, and a
+			// single denial is a single increment. The metric label is the
+			// specific denied reason, not a blanket broker_consent_required.
 			deniedReason := cre.DeniedReason
 			if deniedReason == "" {
 				switch cre.Cause {
@@ -1676,7 +1806,6 @@ func (s *TokenExchangeService) dispatchFrontedBroker(
 		}
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "broker vend failed")
-		s.recordDenied(ctx, req.ClientID, "broker_vend_failed")
 		s.emitFrontedBrokerDenialAudit(ctx, req, subjectClaims, source, target, "broker_vend_failed")
 		return nil, err
 	}
@@ -1739,12 +1868,15 @@ func (s *TokenExchangeService) dispatchFrontedBroker(
 	}, nil
 }
 
-// emitFrontedBrokerDenialAudit writes a fronted-broker denial audit event
-// with chain_kind=fronted, target_kind=broker, via_link, and denied_reason.
-// This is the dispatch-site companion to recordDenied (which emits the
-// simpler ActionTokenExchangeDenied with just reason=<reason>). Both are
-// emitted on each denial branch — the dispatch-site event carries the full
-// fronted chain context for audit trail completeness.
+// emitFrontedBrokerDenialAudit counts the denial and writes the single audit
+// event for it: ActionTokenExchangeDenied carrying the full fronted chain
+// context (chain_kind=fronted, target_kind=broker, via_link, denied_reason).
+//
+// It previously emitted ActionTokenExchanged — the success action — alongside a
+// separate recordDenied row, so "token.exchanged" did not mean a token had been
+// exchanged, and any consumer filtering on it counted denials as successes.
+// Callers pass through here instead of recordDenied; countDenied keeps the
+// metric.
 func (s *TokenExchangeService) emitFrontedBrokerDenialAudit(
 	ctx context.Context,
 	req input.TokenExchangeRequest,
@@ -1752,11 +1884,12 @@ func (s *TokenExchangeService) emitFrontedBrokerDenialAudit(
 	source, target *resource.Resource,
 	deniedReason string,
 ) {
+	s.countDenied(ctx, deniedReason)
 	if s.audit == nil {
 		return
 	}
 	s.audit.Record(ctx, audit.NewEvent(
-		audit.ActionTokenExchanged,
+		audit.ActionTokenExchangeDenied,
 		subjectClaims.Subject, source.Slug, "",
 		fmt.Sprintf("sub=%s subject_client=%s actor_client=%s type=broker_dispatch resource=%s scopes=%s chain_kind=fronted via_link=%s target_kind=broker denied_reason=%s",
 			subjectClaims.Subject,
@@ -1862,32 +1995,45 @@ func scopesNotConsented(grant *resource.ConsentGrant, requested []string) []stri
 }
 
 // operatorAllowsClient reports whether clientID passes the per-resource
-// operator gate. Empty allowlist defaults to permissive ("any consented
-// client may act") per Brief §1.  may flip this to strict-by-default
-// for broker resources if customer feedback warrants it; the call site is
-// shared between Mint and Broker today.
+// operator gate. Empty allowlist defaults to permissive ("any client may
+// act") per Brief §1; user consent is a separate gate, skipped for Mint
+// self-exchange and on fronted paths — Mint→Mint and Mint→Broker alike
+// (see dispatchMint and dispatchFrontedBroker).
+//
+// The permissive default is safe here because it does not stand alone. A
+// same-client exchange carries its own authorization, and a cross-client
+// one on the direct Mint path must additionally appear in this same list —
+// see the cross-client delegation gate in dispatchMint, which requires
+// membership rather than merely tolerating absence.
+//
+// May flip to strict-by-default for broker resources if customer feedback
+// warrants it; the call site is shared by Mint and Broker.
 func operatorAllowsClient(allowed []string, clientID string) bool {
 	if len(allowed) == 0 {
 		return true
 	}
-	for _, a := range allowed {
-		if a == clientID {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(allowed, clientID)
 }
 
 // requiredSourceScopesForTargets reverse-walks a fronting link's ScopeMap to
-// derive the smallest set of source-side scopes that cover every entry in
-// targets. Returns (sourceScopes, unmappedTargets). When unmappedTargets is
-// non-empty the caller MUST reject the request — a target the operator did
-// not map cannot be requested through the fronted path. unmappedTargets is
-// returned in input order; sourceScopes is sorted.
+// derive the source-side scopes a subject token must carry to reach every
+// entry in targets, on the fronted Mint->Mint path. Returns (sourceScopes,
+// unmappedTargets). When unmappedTargets is non-empty the caller MUST reject
+// the request — a target the operator did not map cannot be requested through
+// the fronted path. unmappedTargets is returned in input order; sourceScopes
+// is sorted.
 //
-// Determinism: when multiple source scopes cover the same target, the
-// lexicographically smallest source is picked. Audit lines stay reproducible
-// across replays of the same input.
+// Multi-source maps: when several source keys map to the same target this
+// picks the lexicographically smallest and requires THAT one. It is neither a
+// minimal cover nor an any-of check, so with ScopeMap {"a": ["t"], "b": ["t"]}
+// a subject token carrying only "b" is denied target "t" — even though the
+// operator declared b -> t and the user consented to b.
+//
+// The fronted-broker counterpart validateBrokerTargets accepts ANY covering
+// source key for the same map, so the two fronted paths disagree here. The
+// divergence predates the caller and is tracked as its own decision; the
+// fixed pick keeps audit lines reproducible across replays, which an any-of
+// check would also do. Do not describe the two paths as gating alike.
 func requiredSourceScopesForTargets(m resource.ScopeMap, targets []string) ([]string, []string) {
 	if len(targets) == 0 {
 		return nil, nil
@@ -1925,10 +2071,16 @@ func requiredSourceScopesForTargets(m resource.ScopeMap, targets []string) ([]st
 // validateBrokerTargets gates a fronted-broker exchange where the gateway
 // names the upstream **target** scopes directly. Each requested target must
 // (a) appear as a value in some link.ScopeMap entry — proving the operator
-// declared this target as reachable through the link — and (b) the source
-// key K that maps to it must be present in the subject token's scope claim
-// — proving the user actually consented to the abstract MCP scope that
+// declared this target as reachable through the link — and (b) at least one
+// source key mapping to it must be present in the subject token's scope
+// claim — proving the user actually consented to an abstract MCP scope that
 // authorizes this target.
+//
+// Any covering source satisfies (b). The fronted Mint->Mint counterpart
+// requiredSourceScopesForTargets instead requires the lexicographically
+// first source key specifically, so a multi-source map can pass here and be
+// denied there. Deliberate asymmetry only in the sense that nobody has
+// reconciled it yet — see that function's comment.
 //
 // Returns:
 //   - valid: targets cleared by both gates, sorted; pass through verbatim
@@ -2045,8 +2197,18 @@ func (s *TokenExchangeService) resolveSourceForFronting(ctx context.Context, aud
 	if s.fronting == nil || s.registry == nil {
 		return nil
 	}
+	// Best-effort: if issuer resolution fails, treat it as empty so the
+	// self-audience skip is conservative (may attempt to resolve the issuer
+	// URL as a resource, which will safely fail via registry.Resolve).
+	selfIssuer, err := s.issuerProvider.Issuer(ctx)
+	if err != nil {
+		s.logger.WarnContext(ctx, "treating issuer as empty; fronting source resolution may skip self-bound URIs",
+			"error", err,
+			"site", "resolveSourceForFronting",
+		)
+	}
 	for _, aud := range audience {
-		if aud == "" || aud == s.issuer {
+		if aud == "" || aud == selfIssuer {
 			continue
 		}
 		src, err := s.registry.Resolve(ctx, aud)

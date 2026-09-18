@@ -9,6 +9,8 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -22,11 +24,39 @@ func testObs() *observability.Provider {
 	return observability.NewNoop()
 }
 
-// newTestFetcher creates a fetcher with loopback allowed for httptest servers.
-func newTestFetcher(requireHTTPS bool) *cimd.Fetcher {
-	f := cimd.New(requireHTTPS, time.Hour, 10*time.Second, testObs())
-	f.SetAllowLoopback(true)
-	return f
+// newTestFetcher creates a fetcher. Address policy is a per-request config knob
+// now, so the fetcher itself carries no policy.
+func newTestFetcher() *cimd.Fetcher {
+	return cimd.New(testObs())
+}
+
+// fetchCfg returns a per-request fetch config with test defaults (1h cache TTL,
+// 10s fetch timeout) and address filtering off, since tests point at httptest
+// servers on loopback. requireHTTPS varies per test.
+func fetchCfg(requireHTTPS bool) output.CIMDFetchConfig {
+	return output.CIMDFetchConfig{
+		RequireHTTPS:          requireHTTPS,
+		AllowPrivateAddresses: true,
+		CacheTTL:              time.Hour,
+		FetchTimeout:          10 * time.Second,
+	}
+}
+
+// cimdPath is the path component every test CIMD URL carries.
+//
+// It is not decoration: the MCP 2026-07-28 client-registration spec requires the
+// client_id URL to contain a path component, so a bare httptest origin
+// (http://127.0.0.1:PORT) is not a legal client_id and the fetcher now rejects
+// it before any network call. Appending this keeps every test exercising the
+// fetch path it means to exercise rather than tripping the structural gate.
+const cimdPath = "/client.json"
+
+// fetchCfgStrict is fetchCfg with address filtering on — for the tests that
+// assert loopback and private addresses are refused.
+func fetchCfgStrict(requireHTTPS bool) output.CIMDFetchConfig {
+	cfg := fetchCfg(requireHTTPS)
+	cfg.AllowPrivateAddresses = false
+	return cfg
 }
 
 func serveCIMD(t *testing.T, doc output.CIMDDocument) *httptest.Server {
@@ -44,7 +74,7 @@ func TestFetch_ValidDocument(t *testing.T) {
 	// Use a handler that dynamically sets client_id to the request URL.
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		doc := output.CIMDDocument{
-			ClientID:     "http://" + r.Host,
+			ClientID:     "http://" + r.Host + r.URL.Path,
 			ClientName:   "Test Client",
 			RedirectURIs: []string{"https://app.example.com/callback"},
 		}
@@ -53,13 +83,13 @@ func TestFetch_ValidDocument(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	f := newTestFetcher(false)
-	doc, err := f.Fetch(context.Background(), ts.URL)
+	f := newTestFetcher()
+	doc, err := f.Fetch(context.Background(), ts.URL+cimdPath, fetchCfg(false))
 	if err != nil {
 		t.Fatalf("fetch: %v", err)
 	}
-	if doc.ClientID != ts.URL {
-		t.Errorf("client_id: got %q, want %q", doc.ClientID, ts.URL)
+	if doc.ClientID != ts.URL+cimdPath {
+		t.Errorf("client_id: got %q, want %q", doc.ClientID, ts.URL+cimdPath)
 	}
 	if doc.ClientName != "Test Client" {
 		t.Errorf("client_name: got %q", doc.ClientName)
@@ -82,8 +112,8 @@ func TestFetch_HTTPRejectedWhenHTTPSRequired(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	f := newTestFetcher(true)
-	_, err := f.Fetch(context.Background(), ts.URL)
+	f := newTestFetcher()
+	_, err := f.Fetch(context.Background(), ts.URL+cimdPath, fetchCfg(true))
 	if err == nil {
 		t.Fatal("expected error for HTTP when HTTPS required")
 	}
@@ -104,8 +134,8 @@ func TestFetch_ClientIDMismatch(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	f := newTestFetcher(false)
-	_, err := f.Fetch(context.Background(), ts.URL)
+	f := newTestFetcher()
+	_, err := f.Fetch(context.Background(), ts.URL+cimdPath, fetchCfg(false))
 	if err == nil {
 		t.Fatal("expected error for client_id mismatch")
 	}
@@ -133,14 +163,14 @@ func TestFetch_MissingRequiredFields(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				doc := tt.doc
-				doc.ClientID = "http://" + r.Host
+				doc.ClientID = "http://" + r.Host + r.URL.Path
 				w.Header().Set("Content-Type", "application/json")
 				json.NewEncoder(w).Encode(doc)
 			}))
 			defer ts.Close()
 
-			f := newTestFetcher(false)
-			_, err := f.Fetch(context.Background(), ts.URL)
+			f := newTestFetcher()
+			_, err := f.Fetch(context.Background(), ts.URL+cimdPath, fetchCfg(false))
 			if err == nil {
 				t.Fatal("expected error for missing fields")
 			}
@@ -158,8 +188,8 @@ func TestFetch_InvalidContentType(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	f := newTestFetcher(false)
-	_, err := f.Fetch(context.Background(), ts.URL)
+	f := newTestFetcher()
+	_, err := f.Fetch(context.Background(), ts.URL+cimdPath, fetchCfg(false))
 	if err == nil {
 		t.Fatal("expected error for wrong content-type")
 	}
@@ -174,8 +204,8 @@ func TestFetch_Non200Status(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	f := newTestFetcher(false)
-	_, err := f.Fetch(context.Background(), ts.URL)
+	f := newTestFetcher()
+	_, err := f.Fetch(context.Background(), ts.URL+cimdPath, fetchCfg(false))
 	if err == nil {
 		t.Fatal("expected error for 404")
 	}
@@ -189,7 +219,7 @@ func TestFetch_CacheHit(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callCount++
 		doc := output.CIMDDocument{
-			ClientID:     "http://" + r.Host,
+			ClientID:     "http://" + r.Host + r.URL.Path,
 			ClientName:   "Cached Client",
 			RedirectURIs: []string{"https://app.example.com/callback"},
 		}
@@ -198,10 +228,10 @@ func TestFetch_CacheHit(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	f := newTestFetcher(false)
+	f := newTestFetcher()
 
 	// First fetch — hits server.
-	_, err := f.Fetch(context.Background(), ts.URL)
+	_, err := f.Fetch(context.Background(), ts.URL+cimdPath, fetchCfg(false))
 	if err != nil {
 		t.Fatalf("first fetch: %v", err)
 	}
@@ -210,7 +240,7 @@ func TestFetch_CacheHit(t *testing.T) {
 	}
 
 	// Second fetch — cache hit.
-	doc, err := f.Fetch(context.Background(), ts.URL)
+	doc, err := f.Fetch(context.Background(), ts.URL+cimdPath, fetchCfg(false))
 	if err != nil {
 		t.Fatalf("second fetch: %v", err)
 	}
@@ -228,8 +258,8 @@ func TestFetch_NoRedirectsFollowed(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	f := newTestFetcher(false)
-	_, err := f.Fetch(context.Background(), ts.URL)
+	f := newTestFetcher()
+	_, err := f.Fetch(context.Background(), ts.URL+cimdPath, fetchCfg(false))
 	if err == nil {
 		t.Fatal("expected error when server redirects")
 	}
@@ -242,7 +272,7 @@ func TestFetch_NoRedirectsFollowed(t *testing.T) {
 func TestFetch_AcceptsClientIDPlusJSON(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		doc := output.CIMDDocument{
-			ClientID:     "http://" + r.Host,
+			ClientID:     "http://" + r.Host + r.URL.Path,
 			ClientName:   "Draft CT Client",
 			RedirectURIs: []string{"https://app.example.com/callback"},
 		}
@@ -251,8 +281,8 @@ func TestFetch_AcceptsClientIDPlusJSON(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	f := newTestFetcher(false)
-	doc, err := f.Fetch(context.Background(), ts.URL)
+	f := newTestFetcher()
+	doc, err := f.Fetch(context.Background(), ts.URL+cimdPath, fetchCfg(false))
 	if err != nil {
 		t.Fatalf("fetch: %v", err)
 	}
@@ -269,12 +299,13 @@ func TestFetch_TimeoutReturnsError(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	// Create fetcher with very short timeout (100ms).
-	f := cimd.New(false, time.Hour, 100*time.Millisecond, testObs())
-	f.SetAllowLoopback(true)
+	f := newTestFetcher()
 
 	start := time.Now()
-	_, err := f.Fetch(context.Background(), ts.URL)
+	// Per-request config with a very short timeout (100ms).
+	_, err := f.Fetch(context.Background(), ts.URL+cimdPath, output.CIMDFetchConfig{
+		RequireHTTPS: false, AllowPrivateAddresses: true, CacheTTL: time.Hour, FetchTimeout: 100 * time.Millisecond,
+	})
 	elapsed := time.Since(start)
 
 	if err == nil {
@@ -294,7 +325,7 @@ func TestFetch_ExtraFieldsAccepted(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Return a valid CIMD doc with additional unknown fields.
 		doc := map[string]any{
-			"client_id":     "http://" + r.Host,
+			"client_id":     "http://" + r.Host + r.URL.Path,
 			"client_name":   "Extra Fields Client",
 			"redirect_uris": []string{"https://app.example.com/callback"},
 			// Extra fields not in the CIMDDocument struct:
@@ -309,8 +340,8 @@ func TestFetch_ExtraFieldsAccepted(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	f := newTestFetcher(false)
-	doc, err := f.Fetch(context.Background(), ts.URL)
+	f := newTestFetcher()
+	doc, err := f.Fetch(context.Background(), ts.URL+cimdPath, fetchCfg(false))
 	if err != nil {
 		t.Fatalf("fetch with extra fields should succeed: %v", err)
 	}
@@ -332,10 +363,11 @@ func TestFetch_SSRFPrivateIPRejected(t *testing.T) {
 		"http://[fd00::1]/.well-known/oauth-client",       // IPv6 private
 	}
 
-	f := cimd.New(false, time.Hour, 10*time.Second, testObs())
+	// Address filtering on: these URLs must be rejected at the URL-safety check.
+	f := cimd.New(testObs())
 	for _, u := range urls {
 		t.Run(u, func(t *testing.T) {
-			_, err := f.Fetch(context.Background(), u)
+			_, err := f.Fetch(context.Background(), u, fetchCfgStrict(false))
 			if err == nil {
 				t.Fatalf("expected error for private IP URL %s", u)
 			}
@@ -356,10 +388,11 @@ func TestFetch_SSRFLoopbackRejected(t *testing.T) {
 		"http://127.0.0.2/.well-known/oauth-client", // alternate loopback
 	}
 
-	f := cimd.New(false, time.Hour, 10*time.Second, testObs())
+	// Address filtering on: loopback must be rejected at the URL-safety check.
+	f := cimd.New(testObs())
 	for _, u := range urls {
 		t.Run(u, func(t *testing.T) {
-			_, err := f.Fetch(context.Background(), u)
+			_, err := f.Fetch(context.Background(), u, fetchCfgStrict(false))
 			if err == nil {
 				t.Fatalf("expected error for loopback URL %s", u)
 			}
@@ -378,8 +411,8 @@ func TestFetch_InvalidJSON(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	f := newTestFetcher(false)
-	_, err := f.Fetch(context.Background(), ts.URL)
+	f := newTestFetcher()
+	_, err := f.Fetch(context.Background(), ts.URL+cimdPath, fetchCfg(false))
 	if err == nil {
 		t.Fatal("expected error for invalid JSON body")
 	}
@@ -400,8 +433,8 @@ func TestFetch_LargeResponseRejected(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	f := newTestFetcher(false)
-	_, err := f.Fetch(context.Background(), ts.URL)
+	f := newTestFetcher()
+	_, err := f.Fetch(context.Background(), ts.URL+cimdPath, fetchCfg(false))
 	if err == nil {
 		t.Fatal("expected error for oversized response")
 	}
@@ -416,10 +449,10 @@ func TestFetch_UnsupportedScheme(t *testing.T) {
 		"ftp://example.com/.well-known/oauth-client",
 		"file:///etc/passwd",
 	}
-	f := newTestFetcher(false)
+	f := newTestFetcher()
 	for _, u := range urls {
 		t.Run(u, func(t *testing.T) {
-			_, err := f.Fetch(context.Background(), u)
+			_, err := f.Fetch(context.Background(), u, fetchCfg(false))
 			if err == nil {
 				t.Fatalf("expected error for scheme in %s", u)
 			}
@@ -435,7 +468,7 @@ func TestFetch_UnsupportedScheme(t *testing.T) {
 func TestFetch_EmptyRedirectURIs(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		doc := map[string]any{
-			"client_id":     "http://" + r.Host,
+			"client_id":     "http://" + r.Host + r.URL.Path,
 			"client_name":   "Empty Redirects",
 			"redirect_uris": []string{},
 		}
@@ -444,8 +477,8 @@ func TestFetch_EmptyRedirectURIs(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	f := newTestFetcher(false)
-	_, err := f.Fetch(context.Background(), ts.URL)
+	f := newTestFetcher()
+	_, err := f.Fetch(context.Background(), ts.URL+cimdPath, fetchCfg(false))
 	if err == nil {
 		t.Fatal("expected error for empty redirect_uris")
 	}
@@ -458,7 +491,7 @@ func TestFetch_EmptyRedirectURIs(t *testing.T) {
 func TestFetch_InvalidRedirectURI(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		doc := output.CIMDDocument{
-			ClientID:     "http://" + r.Host,
+			ClientID:     "http://" + r.Host + r.URL.Path,
 			ClientName:   "Bad Redirect",
 			RedirectURIs: []string{"https://app.example.com/callback#fragment"},
 		}
@@ -467,8 +500,8 @@ func TestFetch_InvalidRedirectURI(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	f := newTestFetcher(false)
-	_, err := f.Fetch(context.Background(), ts.URL)
+	f := newTestFetcher()
+	_, err := f.Fetch(context.Background(), ts.URL+cimdPath, fetchCfg(false))
 	if err == nil {
 		t.Fatal("expected error for redirect_uri with fragment")
 	}
@@ -490,8 +523,8 @@ func TestFetch_MissingClientID(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	f := newTestFetcher(false)
-	_, err := f.Fetch(context.Background(), ts.URL)
+	f := newTestFetcher()
+	_, err := f.Fetch(context.Background(), ts.URL+cimdPath, fetchCfg(false))
 	if err == nil {
 		t.Fatal("expected error for missing client_id")
 	}
@@ -504,7 +537,7 @@ func TestFetch_MissingClientID(t *testing.T) {
 func TestFetch_ConcurrentAccess(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		doc := output.CIMDDocument{
-			ClientID:     "http://" + r.Host,
+			ClientID:     "http://" + r.Host + r.URL.Path,
 			ClientName:   "Concurrent Test",
 			RedirectURIs: []string{"https://app.example.com/callback"},
 		}
@@ -513,13 +546,13 @@ func TestFetch_ConcurrentAccess(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	f := newTestFetcher(false)
+	f := newTestFetcher()
 	ctx := context.Background()
 
 	errs := make(chan error, 10)
 	for i := 0; i < 10; i++ {
 		go func() {
-			_, err := f.Fetch(ctx, ts.URL)
+			_, err := f.Fetch(ctx, ts.URL+cimdPath, fetchCfg(false))
 			errs <- err
 		}()
 	}
@@ -530,13 +563,55 @@ func TestFetch_ConcurrentAccess(t *testing.T) {
 	}
 }
 
+// TestFetch_PerRequestRequireHTTPS proves RequireHTTPS is honored per request on
+// a single Fetcher instance: an HTTP URL is accepted when the per-request config
+// sets RequireHTTPS=false and rejected when it sets RequireHTTPS=true.
+func TestFetch_PerRequestRequireHTTPS(t *testing.T) {
+	validDoc := func() *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			doc := output.CIMDDocument{
+				ClientID:     "http://" + r.Host + r.URL.Path,
+				ClientName:   "Per-Request Client",
+				RedirectURIs: []string{"https://app.example.com/callback"},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(doc)
+		}))
+	}
+
+	f := newTestFetcher()
+
+	// Per-request RequireHTTPS=false ⇒ HTTP allowed.
+	ts1 := validDoc()
+	defer ts1.Close()
+	if _, err := f.Fetch(context.Background(), ts1.URL+cimdPath, output.CIMDFetchConfig{
+		RequireHTTPS: false, AllowPrivateAddresses: true, CacheTTL: time.Hour, FetchTimeout: 10 * time.Second,
+	}); err != nil {
+		t.Fatalf("HTTP should be allowed with per-request RequireHTTPS=false: %v", err)
+	}
+
+	// Per-request RequireHTTPS=true ⇒ same-shaped HTTP URL rejected.
+	// Fresh server avoids a cache hit from the prior success.
+	ts2 := validDoc()
+	defer ts2.Close()
+	_, err := f.Fetch(context.Background(), ts2.URL+cimdPath, output.CIMDFetchConfig{
+		RequireHTTPS: true, AllowPrivateAddresses: true, CacheTTL: time.Hour, FetchTimeout: 10 * time.Second,
+	})
+	if err == nil {
+		t.Fatal("HTTP should be rejected with per-request RequireHTTPS=true")
+	}
+	if !errors.Is(err, domain.ErrCIMDFetchFailed) {
+		t.Errorf("expected ErrCIMDFetchFailed, got %v", err)
+	}
+}
+
 // TestFetch_CacheExpiry verifies that expired cache entries are not returned.
 func TestFetch_CacheExpiry(t *testing.T) {
 	callCount := 0
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callCount++
 		doc := output.CIMDDocument{
-			ClientID:     "http://" + r.Host,
+			ClientID:     "http://" + r.Host + r.URL.Path,
 			ClientName:   "Cache Expiry",
 			RedirectURIs: []string{"https://app.example.com/callback"},
 		}
@@ -545,14 +620,13 @@ func TestFetch_CacheExpiry(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	// Very short cache TTL.
-	f := cimd.New(false, time.Millisecond, 10*time.Second, testObs())
-	f.SetAllowLoopback(true)
-
+	f := newTestFetcher()
 	ctx := context.Background()
+	// Per-request config with a very short cache TTL.
+	cfg := output.CIMDFetchConfig{RequireHTTPS: false, AllowPrivateAddresses: true, CacheTTL: time.Millisecond, FetchTimeout: 10 * time.Second}
 
 	// First fetch.
-	_, err := f.Fetch(ctx, ts.URL)
+	_, err := f.Fetch(ctx, ts.URL+cimdPath, cfg)
 	if err != nil {
 		t.Fatalf("first fetch: %v", err)
 	}
@@ -564,11 +638,172 @@ func TestFetch_CacheExpiry(t *testing.T) {
 	time.Sleep(5 * time.Millisecond)
 
 	// Second fetch — cache expired, should hit server again.
-	_, err = f.Fetch(ctx, ts.URL)
+	_, err = f.Fetch(ctx, ts.URL+cimdPath, cfg)
 	if err != nil {
 		t.Fatalf("second fetch: %v", err)
 	}
 	if callCount != 2 {
 		t.Errorf("expected 2 server calls after cache expiry, got %d", callCount)
+	}
+}
+
+// TestFetch_CacheDoesNotBypassScheme verifies the per-request scheme check runs
+// BEFORE the cache lookup: a doc cached over http:// (RequireHTTPS=false) must
+// not be served to a later RequireHTTPS=true request for the same URL via a
+// cache hit that skips the HTTPS scheme check.
+func TestFetch_CacheDoesNotBypassScheme(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		doc := output.CIMDDocument{
+			ClientID:     "http://" + r.Host + r.URL.Path,
+			ClientName:   "Cache Policy Test",
+			RedirectURIs: []string{"https://app.example.com/callback"},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(doc)
+	}))
+	defer ts.Close()
+
+	f := newTestFetcher()
+
+	// Seed the cache over http:// with RequireHTTPS=false.
+	if _, err := f.Fetch(context.Background(), ts.URL+cimdPath, output.CIMDFetchConfig{
+		RequireHTTPS: false, AllowPrivateAddresses: true, CacheTTL: time.Hour, FetchTimeout: 10 * time.Second,
+	}); err != nil {
+		t.Fatalf("seed fetch (RequireHTTPS=false): %v", err)
+	}
+
+	// Same URL with RequireHTTPS=true must be rejected by the scheme check, not
+	// served from cache.
+	_, err := f.Fetch(context.Background(), ts.URL+cimdPath, output.CIMDFetchConfig{
+		RequireHTTPS: true, AllowPrivateAddresses: true, CacheTTL: time.Hour, FetchTimeout: 10 * time.Second,
+	})
+	if err == nil {
+		t.Fatal("RequireHTTPS=true must reject the cached http:// URL")
+	}
+	if !errors.Is(err, domain.ErrCIMDFetchFailed) {
+		t.Errorf("expected ErrCIMDFetchFailed (scheme), got %v", err)
+	}
+}
+
+// The client_id URL MUST use https and contain a path component
+// (MCP 2026-07-28 Client Registration, citing
+// draft-ietf-oauth-client-id-metadata-document-00 §"Implementation
+// Requirements").
+//
+// The path half is the security-relevant one. An origin-only client_id
+// collapses every client hosted on a domain into one identity: the consent
+// record, and the client_name rendered on the consent screen, would be shared
+// with any shared-hosting neighbour or subdomain takeover on that origin.
+//
+// The check must reject BEFORE any network call — a structurally invalid
+// identifier should never reach the fetch path, so these cases point at a
+// server that would answer if contacted, and assert it never is.
+func TestFetch_RejectsClientIDWithoutPathComponent(t *testing.T) {
+	var hits int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		doc := output.CIMDDocument{
+			ClientID:     "http://" + r.Host + r.URL.Path,
+			ClientName:   "Test Client",
+			RedirectURIs: []string{"https://app.example.com/callback"},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(doc)
+	}))
+	defer ts.Close()
+
+	cases := []struct {
+		name    string
+		url     string
+		wantErr bool
+	}{
+		{"bare origin rejected", ts.URL, true},
+		{"origin with root slash rejected", ts.URL + "/", true},
+		{"path component accepted", ts.URL + "/client.json", false},
+		{"nested path accepted", ts.URL + "/oauth/client-metadata.json", false},
+	}
+
+	f := newTestFetcher()
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			before := atomic.LoadInt32(&hits)
+			_, err := f.Fetch(context.Background(), tc.url, fetchCfg(false))
+
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("Fetch(%q) succeeded; want rejection for a client_id with no path component", tc.url)
+				}
+				if !errors.Is(err, domain.ErrCIMDInvalid) {
+					t.Errorf("error = %v, want ErrCIMDInvalid", err)
+				}
+				if got := atomic.LoadInt32(&hits) - before; got != 0 {
+					t.Errorf("rejected URL still produced %d request(s); the structural check must run before any network call", got)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("Fetch(%q): %v", tc.url, err)
+			}
+		})
+	}
+}
+
+// Scheme column, address policy held constant: require_https governs http://
+// and nothing else touches it.
+func TestFetch_SchemeControl_IsIndependent(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		doc := output.CIMDDocument{
+			ClientID:     "http://" + r.Host + r.URL.Path,
+			ClientName:   "Test Client",
+			RedirectURIs: []string{"https://app.example.com/callback"},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(doc)
+	}))
+	defer ts.Close()
+
+	f := newTestFetcher()
+
+	// http:// permitted when the scheme control is off.
+	if _, err := f.Fetch(context.Background(), ts.URL+cimdPath, fetchCfg(false)); err != nil {
+		t.Fatalf("http:// must be permitted with RequireHTTPS=false: %v", err)
+	}
+
+	// And rejected when it is on — same address policy in both calls.
+	_, err := f.Fetch(context.Background(), "http://example.com/client.json", fetchCfg(true))
+	if err == nil {
+		t.Fatal("RequireHTTPS=true must reject an http:// URL")
+	}
+	if !strings.Contains(err.Error(), "HTTPS required") {
+		t.Errorf("wrong rejection reason: %v", err)
+	}
+}
+
+// Address column, scheme policy held constant at its secure default: only
+// allow_private_addresses moves it.
+//
+// This asserts at the URL layer only: 127.0.0.1 is a literal, refused without
+// the transport being consulted. Do not read it as coverage of the dial-time
+// guarantee — that needs a hostname, and is proven in internal/ssrf by
+// TestNewSafeTransport_BlocksHostnamesResolvingToPrivate.
+func TestFetch_AddressControl_IsIndependent(t *testing.T) {
+	f := newTestFetcher()
+	const loopbackHTTPS = "https://127.0.0.1:8443/client.json"
+
+	// Filtering on: a private literal is refused at the URL layer.
+	_, err := f.Fetch(context.Background(), loopbackHTTPS, fetchCfgStrict(true))
+	if err == nil {
+		t.Fatal("AllowPrivateAddresses=false must refuse a loopback URL")
+	}
+	if !strings.Contains(err.Error(), "loopback address rejected") {
+		t.Errorf("wrong rejection reason: %v", err)
+	}
+
+	// Filtering off: the URL check no longer refuses it. Nothing is listening,
+	// so the fetch still fails — but not for being loopback.
+	_, err = f.Fetch(context.Background(), loopbackHTTPS, fetchCfg(true))
+	if err != nil && strings.Contains(err.Error(), "loopback address rejected") {
+		t.Errorf("AllowPrivateAddresses=true must not refuse by address: %v", err)
 	}
 }

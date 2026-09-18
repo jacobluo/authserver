@@ -15,6 +15,8 @@ All endpoints are documented from their route registration site in `api/public/*
 | --- | --- | --- | --- |
 | `GET` | `/.well-known/jwks.json` | public | [#http-public-well-known-jwks-json](#http-public-well-known-jwks-json) |
 | `GET` | `/.well-known/oauth-authorization-server` | public | [#http-public-well-known-oauth-authorization-server](#http-public-well-known-oauth-authorization-server) |
+| `GET` | `/.well-known/oauth-protected-resource` | public | [#http-public-well-known-oauth-protected-resource](#http-public-well-known-oauth-protected-resource) |
+| `GET` | `/.well-known/oauth-protected-resource/{ref...}` | public | [#http-public-well-known-oauth-protected-resource-ref](#http-public-well-known-oauth-protected-resource-ref) |
 | `GET` | `/.well-known/openid-configuration` | public | [#http-public-well-known-openid-configuration](#http-public-well-known-openid-configuration) |
 | `GET` | `/admin/audit` | admin | [#http-admin-audit-list](#http-admin-audit-list) |
 | `POST` | `/admin/auth/verify` | admin | [#http-admin-auth-verify](#http-admin-auth-verify) |
@@ -98,6 +100,7 @@ All endpoints are documented from their route registration site in `api/public/*
 | `GET` | `/consent` | public | [#http-public-consent](#http-public-consent) |
 | `POST` | `/consent` | public | [#http-public-consent-post](#http-public-consent-post) |
 | `GET` | `/health` | public | [#http-public-health](#http-public-health) |
+| `GET` | `/livez` | public | [#http-public-livez](#http-public-livez) |
 | `GET` | `/login` | public | [#http-public-login](#http-public-login) |
 | `POST` | `/login` | public | [#http-public-login-post](#http-public-login-post) |
 | `POST` | `/logout` | public | [#http-public-logout-post](#http-public-logout-post) |
@@ -119,7 +122,7 @@ All endpoints are documented from their route registration site in `api/public/*
 
 **Server** — public (:9000)  
 **Auth** — none (public; request-body parameters identify the caller)  
-**Source** — `api/public/wellknown/routes.go:61`
+**Source** — `api/public/wellknown/routes.go:44`
 
 **Response 200** — JWKS document (public keys only). Cache-Control `max-age=300`.
 
@@ -131,9 +134,29 @@ All endpoints are documented from their route registration site in `api/public/*
 
 **Server** — public (:9000)  
 **Auth** — none (public; request-body parameters identify the caller)  
-**Source** — `api/public/wellknown/routes.go:62`
+**Source** — `api/public/wellknown/routes.go:47`
 
 **Response 200** — RFC 8414 metadata. Body shape: see `asMetadata` struct in `api/public/wellknown/dto.go`.
+
+---
+
+### `GET /.well-known/oauth-protected-resource`
+
+<a id="http-public-well-known-oauth-protected-resource"></a>
+
+**Server** — public (:9000)  
+**Auth** — none (public; request-body parameters identify the caller)  
+**Source** — `api/public/wellknown/routes.go:63`
+
+---
+
+### `GET /.well-known/oauth-protected-resource/{ref...}`
+
+<a id="http-public-well-known-oauth-protected-resource-ref"></a>
+
+**Server** — public (:9000)  
+**Auth** — none (public; request-body parameters identify the caller)  
+**Source** — `api/public/wellknown/routes.go:64`
 
 ---
 
@@ -143,7 +166,7 @@ All endpoints are documented from their route registration site in `api/public/*
 
 **Server** — public (:9000)  
 **Auth** — none (public; request-body parameters identify the caller)  
-**Source** — `api/public/wellknown/routes.go:63`
+**Source** — `api/public/wellknown/routes.go:48`
 
 **Response 200** — same shape as the RFC 8414 endpoint.
 
@@ -155,7 +178,7 @@ All endpoints are documented from their route registration site in `api/public/*
 
 **Server** — public (:9000)  
 **Auth** — browser session cookie (managed by `shared.SessionMiddleware`)  
-**Source** — `api/public/connection/routes.go:58`
+**Source** — `api/public/connection/routes.go:61`
 
 ---
 
@@ -165,7 +188,7 @@ All endpoints are documented from their route registration site in `api/public/*
 
 **Server** — public (:9000)  
 **Auth** — browser session cookie (managed by `shared.SessionMiddleware`)  
-**Source** — `api/public/connection/routes.go:59`
+**Source** — `api/public/connection/routes.go:62`
 
 ---
 
@@ -175,7 +198,7 @@ All endpoints are documented from their route registration site in `api/public/*
 
 **Server** — public (:9000)  
 **Auth** — browser session cookie (managed by `shared.SessionMiddleware`)  
-**Source** — `api/public/connection/routes.go:60`
+**Source** — `api/public/connection/routes.go:63`
 
 ---
 
@@ -185,7 +208,7 @@ All endpoints are documented from their route registration site in `api/public/*
 
 **Server** — public (:9000)  
 **Auth** — browser session cookie (managed by `shared.SessionMiddleware`)  
-**Source** — `api/public/connection/routes.go:61`
+**Source** — `api/public/connection/routes.go:64`
 
 ---
 
@@ -195,7 +218,7 @@ All endpoints are documented from their route registration site in `api/public/*
 
 **Server** — public (:9000)  
 **Auth** — browser session cookie (managed by `shared.SessionMiddleware`)  
-**Source** — `api/public/oauth/routes.go:188`
+**Source** — `api/public/oauth/routes.go:252`
 
 ---
 
@@ -205,7 +228,7 @@ All endpoints are documented from their route registration site in `api/public/*
 
 **Server** — public (:9000)  
 **Auth** — browser session cookie (managed by `shared.SessionMiddleware`)  
-**Source** — `api/public/oauth/routes.go:189`
+**Source** — `api/public/oauth/routes.go:253`
 
 ---
 
@@ -215,9 +238,21 @@ All endpoints are documented from their route registration site in `api/public/*
 
 **Server** — public (:9000)  
 **Auth** — none (public; request-body parameters identify the caller)  
-**Source** — `api/public/wellknown/routes.go:67`
+**Source** — `api/public/wellknown/routes.go:69`
 
 **Response 200** — [`healthResponse`](#dto-health-response).
+
+---
+
+### `GET /livez`
+
+<a id="http-public-livez"></a>
+
+**Server** — public (:9000)  
+**Auth** — none (public; request-body parameters identify the caller)  
+**Source** — `api/public/wellknown/routes.go:68`
+
+**Response 200** — [`healthResponse`](#dto-health-response). Always 200 while the process serves HTTP; checks no dependencies, so a liveness probe on it never restarts a pod over a backend outage.
 
 ---
 
@@ -227,7 +262,7 @@ All endpoints are documented from their route registration site in `api/public/*
 
 **Server** — public (:9000)  
 **Auth** — none (public; request-body parameters identify the caller)  
-**Source** — `api/public/oauth/routes.go:167`
+**Source** — `api/public/oauth/routes.go:225`
 
 ---
 
@@ -237,7 +272,15 @@ All endpoints are documented from their route registration site in `api/public/*
 
 **Server** — public (:9000)  
 **Auth** — none (public; request-body parameters identify the caller)  
-**Source** — `api/public/oauth/routes.go:168`
+**Source** — `api/public/oauth/routes.go:226`
+
+**Response 303** — on success, redirects to the post-login target.
+
+**Response 404** — local password login is disabled (`oidc.show_local_login: false`). Answered before the body is read. `GET /login` still renders the page, without the password form.
+
+**Response 422** — the login page re-rendered with an error (bad form, bad CSRF nonce, rejected credential).
+
+**Response 429** — the submitted identity is locked out after `rate_limit.auth_fail_max` failures; carries `Retry-After` with the real remaining time. HTML, not an OAuth error body — the caller is a browser posting a form.
 
 ---
 
@@ -247,7 +290,7 @@ All endpoints are documented from their route registration site in `api/public/*
 
 **Server** — public (:9000)  
 **Auth** — none (public; request-body parameters identify the caller)  
-**Source** — `api/public/oauth/routes.go:169`
+**Source** — `api/public/oauth/routes.go:227`
 
 ---
 
@@ -257,7 +300,7 @@ All endpoints are documented from their route registration site in `api/public/*
 
 **Server** — public (:9000)  
 **Auth** — browser session cookie (managed by `shared.SessionMiddleware`)  
-**Source** — `api/public/oauth/routes.go:121`
+**Source** — `api/public/oauth/routes.go:161`
 
 Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_challenge_method=S256`). Redirects to `/consent` after login.
 
@@ -269,7 +312,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — public (:9000)  
 **Auth** — none (public; request-body parameters identify the caller)  
-**Source** — `api/public/oauth/routes.go:142`
+**Source** — `api/public/oauth/routes.go:184`
 
 **Request** — form-encoded `token`. **Response 200** — RFC 7662 introspection response.
 
@@ -281,9 +324,11 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — public (:9000)  
 **Auth** — none (public; request-body parameters identify the caller)  
-**Source** — `api/public/oauth/routes.go:104`
+**Source** — `api/public/oauth/routes.go:144`
 
 **Request** — RFC 7591 client metadata JSON. **Response 201** — registered client metadata.
+
+**Note** — this endpoint creates **user-delegated clients**. Their scopes come from the user at consent time, so a `scope` member in the request is **discarded** and the response carries none. **Register machine-to-machine clients (`client_credentials`, jwt-bearer) with `POST /admin/clients` instead** — that is the only surface that sets a client's scope ceiling, so a client registered here starts without one and those two grants refuse every explicit `scope` at `POST /oauth/token` with `invalid_scope`.
 
 ---
 
@@ -293,7 +338,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — public (:9000)  
 **Auth** — none (public; request-body parameters identify the caller)  
-**Source** — `api/public/oauth/routes.go:136`
+**Source** — `api/public/oauth/routes.go:176`
 
 **Request** — form-encoded `token` + `token_type_hint`. **Response 200** — empty body (RFC 7009).
 
@@ -305,13 +350,15 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — public (:9000)  
 **Auth** — none (public; request-body parameters identify the caller)  
-**Source** — `api/public/oauth/routes.go:129`
+**Source** — `api/public/oauth/routes.go:169`
 
 **Request** — form-encoded `application/x-www-form-urlencoded`. Grant params depend on `grant_type` (`authorization_code`, `client_credentials`, `refresh_token`, `urn:ietf:params:oauth:grant-type:token-exchange`, `urn:ietf:params:oauth:grant-type:jwt-bearer`). DPoP-bound clients send `DPoP` header; the AS may answer with `WWW-Authenticate: DPoP error="use_dpop_nonce"`.
 
 **Response 200** — JSON [`tokenResponseDTO`](#dto-token-response-dto) or [`tokenExchangeResponseDTO`](#dto-token-exchange-response-dto) for RFC 8693 exchanges.
 
 **Errors** — RFC 6749 `invalid_request`, `invalid_client`, `invalid_grant`, `unauthorized_client`, `unsupported_grant_type`, `invalid_scope`, plus `consent_required` (with `consent_url`, see the prior-audit finding in `api/shared/errors.go:36`). Body: [`OAuthErrorResponse`](#dto-oauth-error-response).
+
+**Note** — `invalid_scope` on `client_credentials` or jwt-bearer usually means an empty client ceiling: the client's registered `scope` is read only by those two grants, and set only by the admin surface (`POST /admin/clients`, `PATCH /admin/clients/{client_id}`).
 
 ---
 
@@ -321,7 +368,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — public (:9000)  
 **Auth** — none (public; request-body parameters identify the caller)  
-**Source** — `api/public/oauth/routes.go:212`
+**Source** — `api/public/oauth/routes.go:291`
 
 ---
 
@@ -331,7 +378,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — public (:9000)  
 **Auth** — none (public; request-body parameters identify the caller)  
-**Source** — `api/public/oauth/routes.go:211`
+**Source** — `api/public/oauth/routes.go:290`
 
 ---
 
@@ -341,7 +388,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — public (:9000)  
 **Auth** — none (public; request-body parameters identify the caller)  
-**Source** — `api/public/wellknown/routes.go:68`
+**Source** — `api/public/wellknown/routes.go:70`
 
 **Response 200** — [`healthResponse`](#dto-health-response).
 
@@ -355,9 +402,9 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:78`
+**Source** — `api/admin/routes.go:94`
 
-**Response 200** — `{ events: [` [`auditEventView`](#dto-audit-event-view) `] }`.
+**Response 200** — JSON array of [`auditEventView`](#dto-audit-event-view).
 
 ---
 
@@ -367,7 +414,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:86`
+**Source** — `api/admin/routes.go:102`
 
 **Response 200** — [`authVerifyResponse`](#dto-auth-verify-response).
 
@@ -379,9 +426,9 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:202`
+**Source** — `api/admin/routes.go:224`
 
-**Response 200** — `{ broker_providers: [` [`BrokerProviderView`](#dto-broker-provider-view) `] }`.
+**Response 200** — JSON array of [`BrokerProviderView`](#dto-broker-provider-view).
 
 ---
 
@@ -391,7 +438,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:203`
+**Source** — `api/admin/routes.go:225`
 
 **Request** — JSON [`createBrokerProviderRequest`](#dto-create-broker-provider-request). **Response 201** — [`BrokerProviderView`](#dto-broker-provider-view).
 
@@ -403,7 +450,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:206`
+**Source** — `api/admin/routes.go:228`
 
 **Response 204** — no body.
 
@@ -415,7 +462,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:204`
+**Source** — `api/admin/routes.go:226`
 
 **Response 200** — [`BrokerProviderView`](#dto-broker-provider-view).
 
@@ -427,7 +474,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:205`
+**Source** — `api/admin/routes.go:227`
 
 **Request** — JSON [`patchBrokerProviderRequest`](#dto-patch-broker-provider-request). **Response 200** — [`BrokerProviderView`](#dto-broker-provider-view).
 
@@ -439,9 +486,9 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:53`
+**Source** — `api/admin/routes.go:69`
 
-**Response 200** — JSON `{ clients: [` [`clientView`](#dto-client-view) `] }`.
+**Response 200** — JSON array of [`clientView`](#dto-client-view).
 
 ---
 
@@ -451,7 +498,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:52`
+**Source** — `api/admin/routes.go:68`
 
 **Request** — JSON [`createClientRequest`](#dto-create-client-request).
 
@@ -467,7 +514,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:57`
+**Source** — `api/admin/routes.go:73`
 
 **Response 204** — no body.
 
@@ -479,7 +526,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:54`
+**Source** — `api/admin/routes.go:70`
 
 **Response 200** — JSON [`clientView`](#dto-client-view). 404 `client_not_found`.
 
@@ -491,7 +538,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:55`
+**Source** — `api/admin/routes.go:71`
 
 **Request** — JSON [`updateClientRequest`](#dto-update-client-request) (pointer fields → partial update). **Response 200** — [`clientView`](#dto-client-view).
 
@@ -503,7 +550,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:60`
+**Source** — `api/admin/routes.go:76`
 
 **Response 200** — JSON [`statusResponse`](#dto-status-response).
 
@@ -515,7 +562,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:59`
+**Source** — `api/admin/routes.go:75`
 
 **Response 200** — JSON [`statusResponse`](#dto-status-response).
 
@@ -527,7 +574,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:56`
+**Source** — `api/admin/routes.go:72`
 
 **Response 200** — JSON [`rotateSecretResponse`](#dto-rotate-secret-response); secret shown once.
 
@@ -539,7 +586,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:58`
+**Source** — `api/admin/routes.go:74`
 
 **Response 200** — JSON [`statusResponse`](#dto-status-response).
 
@@ -551,9 +598,9 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:240`
+**Source** — `api/admin/routes.go:262`
 
-**Response 200** — `{ fronting_links: [` [`FrontingLinkView`](#dto-fronting-link-view) `] }`.
+**Response 200** — JSON array of [`FrontingLinkView`](#dto-fronting-link-view).
 
 ---
 
@@ -563,7 +610,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:241`
+**Source** — `api/admin/routes.go:263`
 
 **Request** — JSON [`createFrontingLinkRequest`](#dto-create-fronting-link-request); `?dry_run=true` validates without persisting. **Response 201** — [`FrontingLinkView`](#dto-fronting-link-view).
 
@@ -575,7 +622,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:244`
+**Source** — `api/admin/routes.go:266`
 
 **Response 204** — no body.
 
@@ -587,7 +634,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:242`
+**Source** — `api/admin/routes.go:264`
 
 **Response 200** — [`FrontingLinkView`](#dto-fronting-link-view).
 
@@ -599,7 +646,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:243`
+**Source** — `api/admin/routes.go:265`
 
 **Request** — JSON [`patchFrontingLinkRequest`](#dto-patch-fronting-link-request). **Response 200** — [`FrontingLinkView`](#dto-fronting-link-view).
 
@@ -611,7 +658,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:217`
+**Source** — `api/admin/routes.go:239`
 
 **Response 204** — no body.
 
@@ -623,7 +670,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:216`
+**Source** — `api/admin/routes.go:238`
 
 **Response 204** — no body.
 
@@ -635,7 +682,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:123`
+**Source** — `api/admin/routes.go:145`
 
 ---
 
@@ -645,7 +692,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:122`
+**Source** — `api/admin/routes.go:144`
 
 ---
 
@@ -655,7 +702,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:126`
+**Source** — `api/admin/routes.go:148`
 
 ---
 
@@ -665,7 +712,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:124`
+**Source** — `api/admin/routes.go:146`
 
 ---
 
@@ -675,7 +722,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:125`
+**Source** — `api/admin/routes.go:147`
 
 ---
 
@@ -685,7 +732,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:127`
+**Source** — `api/admin/routes.go:149`
 
 ---
 
@@ -695,7 +742,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:226`
+**Source** — `api/admin/routes.go:248`
 
 **Response 200** — [`IssuanceListResponse`](#dto-issuance-list-response).
 
@@ -707,7 +754,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:228`
+**Source** — `api/admin/routes.go:250`
 
 **Response 204** — no body.
 
@@ -719,7 +766,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:227`
+**Source** — `api/admin/routes.go:249`
 
 **Response 200** — [`IssuanceView`](#dto-issuance-view).
 
@@ -731,7 +778,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:100`
+**Source** — `api/admin/routes.go:116`
 
 **Response 200** — [`listKeysResponse`](#dto-list-keys-response).
 
@@ -743,7 +790,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:101`
+**Source** — `api/admin/routes.go:117`
 
 **Response 200** — [`rotateKeyResponse`](#dto-rotate-key-response).
 
@@ -755,9 +802,9 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:167`
+**Source** — `api/admin/routes.go:189`
 
-**Response 200** — `{ resources: [` [`ResourceView`](#dto-resource-view) `] }`.
+**Response 200** — JSON array of [`ResourceView`](#dto-resource-view).
 
 ---
 
@@ -767,7 +814,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:168`
+**Source** — `api/admin/routes.go:190`
 
 **Request** — JSON [`createResourceRequest`](#dto-create-resource-request). **Response 201** — [`ResourceView`](#dto-resource-view).
 
@@ -779,7 +826,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:171`
+**Source** — `api/admin/routes.go:193`
 
 **Response 204** — no body. 409 [`frontingLinkConflictResponse`](#dto-fronting-link-conflict-response) if fronting links reference the resource without `?cascade=true`.
 
@@ -791,7 +838,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:169`
+**Source** — `api/admin/routes.go:191`
 
 **Response 200** — [`ResourceView`](#dto-resource-view).
 
@@ -803,7 +850,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:170`
+**Source** — `api/admin/routes.go:192`
 
 **Request** — JSON [`patchResourceRequest`](#dto-patch-resource-request). **Response 200** — [`ResourceView`](#dto-resource-view).
 
@@ -815,7 +862,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:245`
+**Source** — `api/admin/routes.go:267`
 
 **Response 200** — [`ResourceFrontingView`](#dto-resource-fronting-view) (split into `fronts` / `fronted_by`).
 
@@ -827,7 +874,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:188`
+**Source** — `api/admin/routes.go:210`
 
 ---
 
@@ -837,7 +884,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:186`
+**Source** — `api/admin/routes.go:208`
 
 ---
 
@@ -847,7 +894,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:187`
+**Source** — `api/admin/routes.go:209`
 
 ---
 
@@ -857,7 +904,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:183`
+**Source** — `api/admin/routes.go:205`
 
 ---
 
@@ -867,7 +914,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:184`
+**Source** — `api/admin/routes.go:206`
 
 ---
 
@@ -877,7 +924,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:185`
+**Source** — `api/admin/routes.go:207`
 
 ---
 
@@ -887,7 +934,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:191`
+**Source** — `api/admin/routes.go:213`
 
 ---
 
@@ -897,7 +944,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:192`
+**Source** — `api/admin/routes.go:214`
 
 ---
 
@@ -907,7 +954,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:193`
+**Source** — `api/admin/routes.go:215`
 
 ---
 
@@ -917,7 +964,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:112`
+**Source** — `api/admin/routes.go:128`
 
 **Response 200** — [`dcrSettingsView`](#dto-dcr-settings-view).
 
@@ -929,7 +976,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:113`
+**Source** — `api/admin/routes.go:129`
 
 **Request** — JSON [`updateDCRSettingsRequest`](#dto-update-dcrsettings-request). **Response 200** — [`dcrSettingsView`](#dto-dcr-settings-view).
 
@@ -941,7 +988,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:81`
+**Source** — `api/admin/routes.go:97`
 
 **Response 200** — [`statsView`](#dto-stats-view).
 
@@ -953,7 +1000,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:90`
+**Source** — `api/admin/routes.go:106`
 
 **Response 200** — [`systemConfigResponse`](#dto-system-config-response).
 
@@ -965,7 +1012,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:89`
+**Source** — `api/admin/routes.go:105`
 
 **Response 200** — [`systemStatusResponse`](#dto-system-status-response).
 
@@ -977,7 +1024,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:63`
+**Source** — `api/admin/routes.go:79`
 
 ---
 
@@ -987,7 +1034,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:64`
+**Source** — `api/admin/routes.go:80`
 
 ---
 
@@ -1007,9 +1054,9 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:67`
+**Source** — `api/admin/routes.go:83`
 
-**Response 200** — `{ users: [` [`userView`](#dto-user-view) `] }`.
+**Response 200** — JSON array of [`userView`](#dto-user-view).
 
 ---
 
@@ -1019,7 +1066,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:68`
+**Source** — `api/admin/routes.go:84`
 
 **Request** — JSON [`createUserRequest`](#dto-create-user-request). **Response 201** — [`userView`](#dto-user-view).
 
@@ -1031,7 +1078,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:71`
+**Source** — `api/admin/routes.go:87`
 
 **Response 204** — no body.
 
@@ -1043,7 +1090,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:69`
+**Source** — `api/admin/routes.go:85`
 
 **Response 200** — [`userView`](#dto-user-view).
 
@@ -1055,7 +1102,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:70`
+**Source** — `api/admin/routes.go:86`
 
 **Request** — JSON [`updateUserRequest`](#dto-update-user-request). **Response 200** — [`userView`](#dto-user-view).
 
@@ -1067,7 +1114,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:74`
+**Source** — `api/admin/routes.go:90`
 
 **Response 200** — JSON [`statusResponse`](#dto-status-response).
 
@@ -1079,7 +1126,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:75`
+**Source** — `api/admin/routes.go:91`
 
 **Response 200** — JSON [`statusResponse`](#dto-status-response).
 
@@ -1091,7 +1138,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:215`
+**Source** — `api/admin/routes.go:237`
 
 **Response 200** — [`UserGrantsView`](#dto-user-grants-view). Note: `credential_data` is NEVER serialized on broker grants.
 
@@ -1103,7 +1150,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:73`
+**Source** — `api/admin/routes.go:89`
 
 **Response 200** — JSON `{ revoked: N }`.
 
@@ -1115,7 +1162,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:72`
+**Source** — `api/admin/routes.go:88`
 
 **Response 200** — `{ tokens: [...] }` (issuance summary; see `api/admin/handlers.go`).
 
@@ -1127,7 +1174,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:136`
+**Source** — `api/admin/routes.go:158`
 
 ---
 
@@ -1137,7 +1184,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:135`
+**Source** — `api/admin/routes.go:157`
 
 ---
 
@@ -1147,7 +1194,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:139`
+**Source** — `api/admin/routes.go:161`
 
 ---
 
@@ -1157,7 +1204,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:137`
+**Source** — `api/admin/routes.go:159`
 
 ---
 
@@ -1167,7 +1214,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:138`
+**Source** — `api/admin/routes.go:160`
 
 ---
 
@@ -1177,7 +1224,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:149`
+**Source** — `api/admin/routes.go:171`
 
 ---
 
@@ -1187,7 +1234,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:148`
+**Source** — `api/admin/routes.go:170`
 
 ---
 
@@ -1197,7 +1244,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:150`
+**Source** — `api/admin/routes.go:172`
 
 ---
 
@@ -1207,7 +1254,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — Prometheus basic-auth (see `metrics.basic_auth_*` config)  
-**Source** — `api/admin/server.go:73`
+**Source** — `api/admin/server.go:77`
 
 **Response 200** — Prometheus text-format metrics. Basic-auth protected.
 
@@ -1359,7 +1406,7 @@ IssuanceView is the wire-level form of an issuances row. AgentChain is non-nil e
 
 OAuthErrorResponse is the combined OAuth + RFC 9457 error response.
 
-**Source** — `api/shared/errors.go:29`
+**Source** — `api/shared/errors.go:28`
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
@@ -1494,12 +1541,14 @@ asMetadata is the JSON body for GET /.well-known/oauth-authorization-server (RFC
 | `introspection_endpoint_auth_methods_supported` | `[]string` | no | `omitempty` |
 | `revocation_endpoint_auth_methods_supported` | `[]string` | yes |  |
 | `code_challenge_methods_supported` | `[]string` | yes |  |
-| `scopes_supported` | `[]string` | yes |  |
+| `scopes_supported` | `[]string` | no | `omitempty` |
 | `resource_indicators_supported` | `bool` | yes |  |
 | `client_id_metadata_document_supported` | `bool` | no | `omitempty` |
+| `authorization_response_iss_parameter_supported` | `bool` | yes | AuthorizationResponseIssParameterSupported is RFC 9207 Section 2.3. No omitempty: a client distinguishes "false" from "absent" only by the local policy in Section 2.4, and omitting the field when true would be a lie, while emitting it explicitly lets a client enforce the strict branch — reject an authorization response that arrives with no iss. |
 | `dpop_signing_alg_values_supported` | `[]string` | no | `omitempty` |
 | `authplane_agent_identity_supported` | `bool` | no | `omitempty`. Authplane extension (non-standard) |
-| `identity_assertion_supported` | `bool` | no | `omitempty`. MCP XAA extension |
+| `authorization_grant_profiles_supported` | `[]string` | no | `omitempty`. AuthorizationGrantProfilesSupported is the discovery field the stable MCP Enterprise-Managed Authorization extension reads (its Discovery section: a client determines profile support by checking for urn:ietf:params:oauth:grant-profile:id-jag here). Defined in draft-ietf-oauth-identity-assertion-authz-grant Section 7.2. |
+| `identity_assertion_supported` | `bool` | no | `omitempty`. IdentityAssertionSupported is a non-standard Authplane flag for the same capability, emitted before the extension stabilized. Deprecated: no conformant client reads it; scheduled for removal in v0.3.0. Clients must use authorization_grant_profiles_supported. |
 
 ### `auditEventView`
 
@@ -1732,7 +1781,7 @@ frontingLinkConflictResponse is the body of the 409 returned from DELETE /admin/
 
 <a id="dto-health-response"></a>
 
-healthResponse is the JSON body for GET /health and GET /ready.
+healthResponse is the JSON body for GET /livez, GET /health and GET /ready.
 
 **Source** — `api/public/wellknown/dto.go:4`
 
@@ -1824,6 +1873,22 @@ patchResourceRequest is the JSON body for PATCH /admin/resources/{id}. Pointer f
 | `scopes` | `*[]scopeWithUpstreamView` | no | `omitempty` |
 | `policy` | `*policyView` | no | `omitempty` |
 
+### `protectedResourceMetadata`
+
+<a id="dto-protected-resource-metadata"></a>
+
+protectedResourceMetadata is the JSON body for GET /.well-known/oauth-protected-resource and its path-suffixed form (RFC 9728 §2). Field order follows the RFC's own presentation order. resource is the only REQUIRED member and so carries no omitempty; the rest are OPTIONAL and are omitted rather than emitted empty, since a client reads an empty scopes_supported as "this resource advertises no scopes" rather than "this server did not say".
+
+**Source** — `api/public/wellknown/dto.go:62`
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `resource` | `string` | yes |  |
+| `authorization_servers` | `[]string` | no | `omitempty` |
+| `scopes_supported` | `[]string` | no | `omitempty` |
+| `bearer_methods_supported` | `[]string` | no | `omitempty` |
+| `resource_name` | `string` | no | `omitempty` |
+
 ### `rateLimitConfigView`
 
 <a id="dto-rate-limit-config-view"></a>
@@ -1833,6 +1898,48 @@ patchResourceRequest is the JSON body for PATCH /admin/resources/{id}. Pointer f
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
 | `enabled` | `bool` | yes |  |
+
+### `registerRequest`
+
+<a id="dto-register-request"></a>
+
+registerRequest is the JSON body for POST /oauth/register: the RFC 7591 client metadata members this authorization server reads. Members outside this set are accepted and ignored, per RFC 7591 §3.1. (Kept as a wire DTO rather than decoding into the input port type so docsgen, which reads struct tags from this file, can publish a field table for the endpoint.)
+
+**Source** — `api/public/oauth/dto.go:73`
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `redirect_uris` | `[]string` | yes |  |
+| `client_name` | `string` | yes |  |
+| `grant_types` | `[]string` | yes |  |
+| `response_types` | `[]string` | yes |  |
+| `token_endpoint_auth_method` | `string` | yes |  |
+| `application_type` | `string` | no | `omitempty`. ApplicationType is the OIDC application_type: "web" or "native". MCP clients are required to send it — omitting it defaults to "web" under OIDC, which refuses the localhost redirect URIs native clients need. |
+| `agent` | `bool` | no | `omitempty`. Agent marks the client as an agent (Authplane extension, not RFC 7591). |
+| `agent_description` | `string` | no | `omitempty`. AgentDescription is a human-readable agent description (Authplane extension, max 255 chars). |
+
+### `registerResponse`
+
+<a id="dto-register-response"></a>
+
+registerResponse is the JSON body returned by POST /oauth/register (RFC 7591 §3.2.1).
+
+**Source** — `api/public/oauth/dto.go:92`
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `client_id` | `string` | yes |  |
+| `client_secret` | `string` | no | `omitempty` |
+| `client_id_issued_at` | `int64` | yes |  |
+| `client_secret_expires_at` | `*int64` | no | `omitempty` |
+| `redirect_uris` | `[]string` | yes |  |
+| `client_name` | `string` | yes |  |
+| `grant_types` | `[]string` | yes |  |
+| `response_types` | `[]string` | yes |  |
+| `token_endpoint_auth_method` | `string` | yes |  |
+| `application_type` | `string` | yes | ApplicationType is always concrete, resolved through the OIDC default, so a client that omitted it learns what it was defaulted to. |
+| `agent` | `bool` | no | `omitempty` |
+| `agent_description` | `string` | no | `omitempty` |
 
 ### `rotateKeyResponse`
 

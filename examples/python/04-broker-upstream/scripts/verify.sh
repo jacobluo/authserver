@@ -91,7 +91,7 @@ prov_resp=$(curl -fsS -X POST "${ADMIN_URL}/admin/broker-providers" \
   "protocol": "oauth",
   "config_data": {
     "client_id": "stub-client-id",
-    "client_secret_env": "AUTHPLANE_ADMIN_API_KEY",
+    "client_secret_ref": "AUTHPLANE_ADMIN_API_KEY",
     "authorize_url": "https://github-stub.example.invalid/login/oauth/authorize",
     "token_url": "https://github-stub.example.invalid/login/oauth/access_token"
   }
@@ -216,7 +216,7 @@ green "exchange policy installed"
 # --- step 8: run the agent — expect ConsentRequiredError --------------------
 # Inside the compose network the agent reaches the AS at `authserver:9000`.
 log "running agent.py — expect ConsentRequiredError with consent_url"
-agent_out=$(docker compose run --rm --no-TTY \
+agent_out=$(docker compose --progress quiet run --build --rm --no-TTY \
   -e CLIENT_ID="${CLIENT_ID}" \
   -e CLIENT_SECRET="${CLIENT_SECRET}" \
   -e AUTHPLANE_ISSUER="http://authserver:9000" \

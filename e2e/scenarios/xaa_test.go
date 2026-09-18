@@ -348,7 +348,11 @@ func TestXAA_Revocation(t *testing.T) {
 	}
 }
 
-// TestXAA_DiscoveryGrantType verifies that jwt-bearer appears in AS metadata.
+// TestXAA_DiscoveryGrantType verifies that jwt-bearer appears in AS metadata,
+// and that the ID-JAG grant profile is advertised under the field the stable MCP
+// Enterprise-Managed Authorization extension actually reads. A conformant client
+// discovers EMA support solely from authorization_grant_profiles_supported, so
+// the grant type alone is not enough to be discoverable.
 func TestXAA_DiscoveryGrantType(t *testing.T) {
 	h, _ := e2e.SetupE2E(t, e2e.HarnessConfig{
 		EnableXAA: true,
@@ -366,6 +370,18 @@ func TestXAA_DiscoveryGrantType(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("AS metadata should include jwt-bearer grant type, got: %v", meta.GrantTypesSupported)
+	}
+
+	profileFound := false
+	for _, p := range meta.AuthorizationGrantProfilesSupported {
+		if p == "urn:ietf:params:oauth:grant-profile:id-jag" {
+			profileFound = true
+			break
+		}
+	}
+	if !profileFound {
+		t.Errorf("AS metadata should advertise the ID-JAG grant profile in authorization_grant_profiles_supported, got: %v",
+			meta.AuthorizationGrantProfilesSupported)
 	}
 }
 
@@ -470,4 +486,85 @@ func xaaDPoPExchange(t *testing.T, issuer, clientID, clientSecret, assertion, sc
 		t.Fatalf("decode token response: %v", err)
 	}
 	return &tr
+}
+
+// TestXAA_RequireResource_NoResourceRefused drives the xaa.require_resource
+// contract end to end. Without the flag this exchange succeeds and mints a
+// token audienced at the issuer; with it on the token endpoint must refuse,
+// on the wire, with 400 invalid_target naming the setting. Asserting it here
+// rather than only at the service boundary is what pins the wire shape: the
+// code is produced by the trailing domain.IsError branch of writeTokenError,
+// so nothing in the handler mentions ErrInvalidTarget by name.
+func TestXAA_RequireResource_NoResourceRefused(t *testing.T) {
+	h, _ := e2e.SetupE2E(t, e2e.HarnessConfig{
+		EnableXAA:          true,
+		XAARequireResource: true,
+	}, []string{"tools/echo"})
+
+	mockIdP := e2e.NewMockIdP(t)
+
+	idpID := h.RegisterTrustedIDP(input.RegisterIDPRequest{
+		Name:    "RequireResourceIdP",
+		Issuer:  mockIdP.Issuer,
+		JWKSUri: mockIdP.Issuer + "/.well-known/jwks.json",
+	})
+	h.CreateXAAPolicy(input.CreatePolicyRequest{
+		Name:  "Allow All",
+		IDPID: idpID,
+	})
+
+	clientID, clientSecret := h.RegisterConfidentialClient(
+		[]string{"urn:ietf:params:oauth:grant-type:jwt-bearer"},
+		"tools/echo",
+	)
+
+	// Neither the assertion nor the request names a resource.
+	assertion := mockIdP.SignIDJAG(t, h.Issuer, clientID, "alice@testcorp.com", "tools/echo")
+
+	oe := h.JWTBearerExchangeExpectError(clientID, clientSecret, assertion, "tools/echo")
+	if oe.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", oe.StatusCode)
+	}
+	if oe.Error != "invalid_target" {
+		t.Errorf("error = %q, want invalid_target", oe.Error)
+	}
+	if !strings.Contains(oe.ErrorDescription, "xaa.require_resource") {
+		t.Errorf("error_description should name the setting, got %q", oe.ErrorDescription)
+	}
+}
+
+// TestXAA_RequireResource_ResourceAccepted — the flag refuses only exchanges
+// that name no resource at all. One that names a registered resource still
+// mints a token audienced at it.
+func TestXAA_RequireResource_ResourceAccepted(t *testing.T) {
+	h, servers := e2e.SetupE2E(t, e2e.HarnessConfig{
+		EnableXAA:          true,
+		XAARequireResource: true,
+	}, []string{"tools/echo"})
+	rs := servers[0]
+
+	mockIdP := e2e.NewMockIdP(t)
+
+	h.RegisterScope(rs.URI, "tools/echo", "Echo tool")
+
+	idpID := h.RegisterTrustedIDP(input.RegisterIDPRequest{
+		Name:    "RequireResourceOKIdP",
+		Issuer:  mockIdP.Issuer,
+		JWKSUri: mockIdP.Issuer + "/.well-known/jwks.json",
+	})
+	h.CreateXAAPolicy(input.CreatePolicyRequest{
+		Name:  "Allow All",
+		IDPID: idpID,
+	})
+
+	clientID, clientSecret := h.RegisterConfidentialClient(
+		[]string{"urn:ietf:params:oauth:grant-type:jwt-bearer"},
+		"tools/echo",
+	)
+
+	assertion := mockIdP.SignIDJAGWithResource(t, h.Issuer, clientID, "alice@testcorp.com", "tools/echo", rs.URI)
+	tr := h.JWTBearerExchangeWithResource(clientID, clientSecret, assertion, "tools/echo", rs.URI)
+	if tr.AccessToken == "" {
+		t.Fatal("expected access token, got empty")
+	}
 }

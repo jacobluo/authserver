@@ -15,19 +15,69 @@ import (
 	"github.com/authplane/authserver/internal/domain"
 	"github.com/authplane/authserver/internal/observability"
 	"github.com/authplane/authserver/internal/ports/input"
+	"github.com/authplane/authserver/internal/ports/output"
 )
 
 // oauthHandler handles GET /oauth/authorize and POST /oauth/token.
 type oauthHandler struct {
-	authorize          AuthorizeProvider
-	token              TokenProvider
-	clientCreds        ClientCredentialsProvider
-	tokenExchange      TokenExchangeProvider
-	jwtBearer          JWTBearerProvider
-	session            *shared.SessionMiddleware
-	obs                *observability.Provider
-	connectConsentBase string // base URL used to build /connect/<provider> consent_urls (Broker upstream re-connect)
-	authorizeBase      string // AS issuer URL used to build /authorize?resource=<slug> consent_urls (AS-side re-consent, )
+	authorize     AuthorizeProvider
+	token         TokenProvider
+	clientCreds   ClientCredentialsProvider
+	tokenExchange TokenExchangeProvider
+	jwtBearer     JWTBearerProvider
+	session       *shared.SessionMiddleware
+	obs           *observability.Provider
+	urls          output.URLBuilder
+	// issuerProvider resolves the AS issuer URL — the public base for
+	// everything under the host (<issuer>/authorize, <issuer>/connect/<provider>,
+	// <issuer>/connections). Both consent_required URL flavors are built
+	// from it. Optional: when nil (or it resolves empty) the handler emits
+	// consent_required without a consent_url.
+	issuerProvider output.IssuerProvider
+}
+
+// resolveIssuer returns the AS issuer identifier for the RFC 9207 iss parameter,
+// or renders an error page and reports false.
+//
+// Failure is fatal here rather than degrading to an omitted iss, which is the
+// opposite of how this handler treats the issuer for consent_url. The asymmetry
+// is deliberate. Discovery advertises
+// authorization_response_iss_parameter_supported: true, and RFC 9207 Section 2.4
+// (reproduced in the MCP 2026-07-28 authorization spec) has a client that read
+// that flag REJECT any authorization response whose iss is absent. Emitting a
+// response we know a conformant client must reject is worse than refusing to
+// build one: the redirect would look successful, burn the authorization code,
+// and fail at the client with no server-side trace. A missing consent_url only
+// degrades a convenience link; a missing iss breaks the response contract.
+//
+// This mirrors ASMetadataService, where every capability lookup degrades except
+// issuer resolution, which is fatal because the document cannot be built
+// without it.
+func (h *oauthHandler) resolveIssuer(w http.ResponseWriter, r *http.Request) (string, bool) {
+	if h.issuerProvider == nil {
+		h.obs.Logger.ErrorContext(r.Context(),
+			"cannot emit the RFC 9207 iss parameter: no issuer provider is wired",
+		)
+		shared.WriteErrorPage(w, r, http.StatusInternalServerError, "Error", "The authorization server is misconfigured.")
+		return "", false
+	}
+	issuer, err := h.issuerProvider.Issuer(r.Context())
+	if err != nil {
+		h.obs.Logger.ErrorContext(r.Context(),
+			"cannot emit the RFC 9207 iss parameter: issuer resolution failed",
+			"error", err,
+		)
+		shared.WriteErrorPage(w, r, http.StatusInternalServerError, "Error", "The authorization server could not resolve its issuer.")
+		return "", false
+	}
+	if issuer == "" {
+		h.obs.Logger.ErrorContext(r.Context(),
+			"cannot emit the RFC 9207 iss parameter: issuer resolved empty",
+		)
+		shared.WriteErrorPage(w, r, http.StatusInternalServerError, "Error", "The authorization server has no issuer configured.")
+		return "", false
+	}
+	return issuer, true
 }
 
 // handleAuthorize handles GET /oauth/authorize.
@@ -49,23 +99,30 @@ func (h *oauthHandler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 		UserID:              userID,
 	}
 
+	// Resolved before StartAuthorization so that every exit path below — success
+	// redirect, error redirect, error page — has the issuer available.
+	iss, ok := h.resolveIssuer(w, r)
+	if !ok {
+		return
+	}
+
 	result, err := h.authorize.StartAuthorization(r.Context(), req)
 	if err != nil {
-		h.handleAuthorizeError(w, r, req, err)
+		h.handleAuthorizeError(w, r, req, err, iss)
 		return
 	}
 
 	// Login required: redirect to login page, preserving the full authorize URL.
 	if result.LoginRequired {
 		loginURL := fmt.Sprintf("/login?redirect=%s", url.QueryEscape(r.URL.String()))
-		http.Redirect(w, r, loginURL, http.StatusSeeOther)
+		shared.RedirectInternal(w, r, h.urls, loginURL, http.StatusSeeOther, h.obs.Logger)
 		return
 	}
 
 	// Consent required: redirect to consent page.
 	if result.ConsentRequired {
 		consentURL := fmt.Sprintf("/consent?session_id=%s", url.QueryEscape(result.Session.ID))
-		http.Redirect(w, r, consentURL, http.StatusSeeOther)
+		shared.RedirectInternal(w, r, h.urls, consentURL, http.StatusSeeOther, h.obs.Logger)
 		return
 	}
 
@@ -73,17 +130,17 @@ func (h *oauthHandler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 	completed, err := h.authorize.CompleteAuthorization(r.Context(), result.Session.ID)
 	if err != nil {
 		h.obs.Logger.ErrorContext(r.Context(), "complete authorization failed", "error", err)
-		redirectWithError(w, r, req.RedirectURI, req.State, "server_error", "authorization failed")
+		redirectWithError(w, r, req.RedirectURI, req.State, "server_error", "authorization failed", iss)
 		return
 	}
 
-	redirectWithCode(w, r, completed.RedirectURI, completed.Code, completed.State)
+	redirectWithCode(w, r, completed.RedirectURI, completed.Code, completed.State, iss)
 }
 
 // handleAuthorizeError routes authorization errors correctly:
 // - Invalid client_id or redirect_uri -> render error page (never redirect to attacker URI)
 // - All other errors -> redirect to redirect_uri with error params
-func (h *oauthHandler) handleAuthorizeError(w http.ResponseWriter, r *http.Request, req input.AuthorizeRequest, err error) {
+func (h *oauthHandler) handleAuthorizeError(w http.ResponseWriter, r *http.Request, req input.AuthorizeRequest, err error, iss string) {
 	switch {
 	case errors.Is(err, domain.ErrInvalidClient):
 		shared.WriteErrorPage(w, r, http.StatusBadRequest, "Invalid Client", "The client_id is not recognized.")
@@ -108,7 +165,7 @@ func (h *oauthHandler) handleAuthorizeError(w http.ResponseWriter, r *http.Reque
 				code = "server_error"
 				desc = "an internal error occurred"
 			}
-			redirectWithError(w, r, req.RedirectURI, req.State, code, desc)
+			redirectWithError(w, r, req.RedirectURI, req.State, code, desc, iss)
 			return
 		}
 		desc := err.Error()
@@ -159,6 +216,7 @@ func (h *oauthHandler) handleAuthCodeExchange(w http.ResponseWriter, r *http.Req
 	req := input.ExchangeCodeRequest{
 		Code:         r.FormValue("code"),
 		RedirectURI:  r.FormValue("redirect_uri"),
+		Resource:     r.FormValue("resource"),
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
 		CodeVerifier: r.FormValue("code_verifier"),
@@ -187,6 +245,7 @@ func (h *oauthHandler) handleRefreshToken(w http.ResponseWriter, r *http.Request
 
 	req := input.RefreshTokenRequest{
 		RefreshToken: r.FormValue("refresh_token"),
+		Resource:     r.FormValue("resource"),
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
 		Scope:        r.FormValue("scope"),
@@ -347,13 +406,29 @@ func (h *oauthHandler) writeTokenError(w http.ResponseWriter, r *http.Request, e
 		//     (agent-attestation scope-insufficient) failures.
 		//   - Both empty → no consent_url; client shows the generic
 		//     consent_required error.
+		// Both consent_url flavors derive from the issuer — the public base
+		// for everything under the host. Resolve it once; on failure (or an
+		// empty value) fall through to the graceful-omit warn below rather
+		// than failing the token response.
+		issuerBase := ""
+		var issuerErr error
+		if h.issuerProvider != nil {
+			issuerBase, issuerErr = h.issuerProvider.Issuer(r.Context())
+		}
 		var consentURL string
 		switch {
+		case issuerErr != nil:
+			h.obs.Logger.WarnContext(r.Context(),
+				"emitting consent_required without consent_url — issuer could not be resolved",
+				"error", issuerErr,
+				"provider_slug", consentErr.ProviderSlug,
+				"resource_slug", consentErr.ResourceSlug,
+			)
 		case consentErr.ProviderSlug != "":
-			consentURL = connectionapi.ConsentURL(h.connectConsentBase, consentErr.ProviderSlug, consentErr.ResourceSlug)
+			consentURL = connectionapi.ConsentURL(issuerBase, consentErr.ProviderSlug, consentErr.ResourceSlug)
 			if consentURL == "" {
 				h.obs.Logger.WarnContext(r.Context(),
-					"emitting consent_required without consent_url — connect.redirect_base_url is not configured",
+					"emitting consent_required without consent_url — issuer is not configured",
 					"provider_slug", consentErr.ProviderSlug,
 					"resource_slug", consentErr.ResourceSlug,
 				)
@@ -363,10 +438,10 @@ func (h *oauthHandler) writeTokenError(w http.ResponseWriter, r *http.Request, e
 			if consentErr.Cause == domain.CauseScopeInsufficient {
 				scope = strings.Join(consentErr.MissingScopes, " ")
 			}
-			consentURL = connectionapi.ReconsentURL(h.authorizeBase, consentErr.ResourceSlug, scope)
+			consentURL = connectionapi.ReconsentURL(issuerBase, consentErr.ResourceSlug, scope)
 			if consentURL == "" {
 				h.obs.Logger.WarnContext(r.Context(),
-					"emitting consent_required without consent_url — server.issuer is not configured",
+					"emitting consent_required without consent_url — issuer is not configured",
 					"resource_slug", consentErr.ResourceSlug,
 				)
 			}
@@ -392,7 +467,8 @@ func (h *oauthHandler) writeTokenError(w http.ResponseWriter, r *http.Request, e
 	case errors.Is(err, domain.ErrCodeConsumed),
 		errors.Is(err, domain.ErrInvalidGrant),
 		errors.Is(err, domain.ErrSessionExpired),
-		errors.Is(err, domain.ErrFamilyRevoked):
+		errors.Is(err, domain.ErrFamilyRevoked),
+		errors.Is(err, domain.ErrReuseRevocationFailed):
 		shared.WriteOAuthError(w, http.StatusBadRequest, "invalid_grant", err.Error())
 	case errors.Is(err, domain.ErrInvalidPKCE):
 		shared.WriteOAuthError(w, http.StatusBadRequest, "invalid_grant", "PKCE verification failed")
@@ -468,7 +544,20 @@ func writeTokenResponse(w http.ResponseWriter, resp *input.TokenResponse) {
 	})
 }
 
-func redirectWithCode(w http.ResponseWriter, r *http.Request, redirectURI, code, state string) {
+// redirectWithCode emits the successful authorization response.
+//
+// iss carries the AS issuer identifier per RFC 9207 Section 2. It is the
+// client's defense against an authorization-server mix-up: without it, a client
+// talking to several ASes cannot tell which one produced a given code, and can
+// be induced to redeem it at the wrong token endpoint.
+//
+// The value is written exactly as the issuer provider returned it. RFC 9207
+// Section 2.4 has clients compare with simple string comparison and forbids
+// them from applying case folding, default-port elision, trailing-slash or
+// percent-encoding normalization — so any normalization here would break the
+// comparison on the other side. url.Values.Encode percent-encodes for transport
+// only; the client decodes before comparing.
+func redirectWithCode(w http.ResponseWriter, r *http.Request, redirectURI, code, state, iss string) {
 	u, err := url.Parse(redirectURI)
 	if err != nil {
 		shared.WriteErrorPage(w, r, http.StatusInternalServerError, "Error", "Invalid redirect URI")
@@ -479,6 +568,7 @@ func redirectWithCode(w http.ResponseWriter, r *http.Request, redirectURI, code,
 	if state != "" {
 		q.Set("state", state)
 	}
+	q.Set("iss", iss)
 	u.RawQuery = q.Encode()
 	http.Redirect(w, r, u.String(), http.StatusSeeOther)
 }
@@ -493,7 +583,15 @@ func extractDPoPInfo(r *http.Request) (proof, method, reqURL string) {
 	return proof, r.Method, shared.RequestURL(r)
 }
 
-func redirectWithError(w http.ResponseWriter, r *http.Request, redirectURI, state, errCode, description string) {
+// redirectWithError emits an error authorization response.
+//
+// iss is included here too: RFC 9207 Section 2 and the MCP 2026-07-28
+// authorization spec both require the issuer on error responses, not only
+// successful ones. It is the error path that most needs it — the spec has
+// clients refuse to act on or display error, error_description and error_uri
+// when the issuer does not match, so an unattributed error is exactly the
+// payload an attacker would want a client to render.
+func redirectWithError(w http.ResponseWriter, r *http.Request, redirectURI, state, errCode, description, iss string) {
 	u, err := url.Parse(redirectURI)
 	if err != nil {
 		shared.WriteErrorPage(w, r, http.StatusInternalServerError, "Error", "Invalid redirect URI")
@@ -505,6 +603,7 @@ func redirectWithError(w http.ResponseWriter, r *http.Request, redirectURI, stat
 	if state != "" {
 		q.Set("state", state)
 	}
+	q.Set("iss", iss)
 	u.RawQuery = q.Encode()
 	http.Redirect(w, r, u.String(), http.StatusSeeOther)
 }

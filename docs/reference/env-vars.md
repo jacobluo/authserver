@@ -6,115 +6,127 @@ Every setting in the on-disk YAML configuration can also be supplied via an `AUT
 
 | Env var | YAML key | Type | Default | Required when | Source |
 | --- | --- | --- | --- | --- | --- |
-| `AUTHPLANE_ADMIN_ADDRESS` | `admin.address` | `string` | `:9001` | — | [`internal/config/loader.go:353`](../../internal/config/loader.go:353) |
-| `AUTHPLANE_ADMIN_API_KEY` | `admin.api_key` | `string` | — | admin is enabled and server.issuer is not localhost | [`internal/config/loader.go:354`](../../internal/config/loader.go:354) |
-| `AUTHPLANE_ADMIN_ENABLED` | `admin.enabled` | `bool` | `true` | — | [`internal/config/loader.go:352`](../../internal/config/loader.go:352) |
-| `AUTHPLANE_AGENTS_ENABLE_JWKS_LISTING` | `agents.enable_jwks_listing` | `bool` | — | — | [`internal/config/loader.go:266`](../../internal/config/loader.go:266) |
-| `AUTHPLANE_BROKER_PROVIDER_AUTHORIZE_URL` | — | — | — | — | [`internal/config/loader.go:479`](../../internal/config/loader.go:479) |
-| `AUTHPLANE_BROKER_PROVIDER_CLIENT_ID` | — | — | — | — | [`internal/config/loader.go:473`](../../internal/config/loader.go:473) |
-| `AUTHPLANE_BROKER_PROVIDER_CLIENT_SECRET_ENV` | — | — | — | — | [`internal/config/loader.go:476`](../../internal/config/loader.go:476) |
-| `AUTHPLANE_BROKER_PROVIDER_DISPLAY_NAME` | — | — | — | — | [`internal/config/loader.go:467`](../../internal/config/loader.go:467) |
-| `AUTHPLANE_BROKER_PROVIDER_PROTOCOL` | — | — | — | — | [`internal/config/loader.go:468`](../../internal/config/loader.go:468) |
-| `AUTHPLANE_BROKER_PROVIDER_RESPONSE_FORMAT` | — | — | — | — | [`internal/config/loader.go:485`](../../internal/config/loader.go:485) |
-| `AUTHPLANE_BROKER_PROVIDER_SLUG` | — | — | — | — | [`internal/config/loader.go:460`](../../internal/config/loader.go:460) |
-| `AUTHPLANE_BROKER_PROVIDER_TOKEN_URL` | — | — | — | — | [`internal/config/loader.go:482`](../../internal/config/loader.go:482) |
-| `AUTHPLANE_CIMD_CACHE_TTL` | `cimd.cache_ttl` | `duration` | `1h` | — | [`internal/config/loader.go:329`](../../internal/config/loader.go:329) |
-| `AUTHPLANE_CIMD_ENABLED` | `cimd.enabled` | `bool` | `true` | — | [`internal/config/loader.go:327`](../../internal/config/loader.go:327) |
-| `AUTHPLANE_CIMD_FETCH_TIMEOUT` | `cimd.fetch_timeout` | `duration` | `10s` | — | [`internal/config/loader.go:330`](../../internal/config/loader.go:330) |
-| `AUTHPLANE_CIMD_REQUIRE_HTTPS` | `cimd.require_https` | `bool` | `true` | — | [`internal/config/loader.go:328`](../../internal/config/loader.go:328) |
-| `AUTHPLANE_CLIENT_CREDENTIALS_ENABLED` | `client_credentials.enabled` | `bool` | `false` | — | [`internal/config/loader.go:247`](../../internal/config/loader.go:247) |
-| `AUTHPLANE_CLIENT_CREDENTIALS_TOKEN_EXPIRY` | `client_credentials.token_expiry` | `duration` | `1h` | — | [`internal/config/loader.go:248`](../../internal/config/loader.go:248) |
-| `AUTHPLANE_CLIENT_SECRET_PEPPER` | `client_secret_pepper` | `string` | — | — | [`internal/config/loader.go:242`](../../internal/config/loader.go:242) |
-| `AUTHPLANE_CONNECT_ALLOWED_RETURN_URLS` | `connect.allowed_return_urls` | `[]string` | — | — | [`internal/config/loader.go:449`](../../internal/config/loader.go:449) |
-| `AUTHPLANE_CONNECT_REDIRECT_BASE_URL` | `connect.redirect_base_url` | `string` | — | — | [`internal/config/loader.go:448`](../../internal/config/loader.go:448) |
-| `AUTHPLANE_CONNECT_STATE_SECRET` | `connect.state_secret` | `string` | — | — | [`internal/config/loader.go:447`](../../internal/config/loader.go:447) |
-| `AUTHPLANE_DATA_ENCRYPTION_DRIVER` | `data_encryption.driver` | `string` | — | — | [`internal/config/loader.go:270`](../../internal/config/loader.go:270) |
-| `AUTHPLANE_DATA_ENCRYPTION_KEY_ENV` | `data_encryption.aes_master.key_env` | `string` | — | — | [`internal/config/loader.go:271`](../../internal/config/loader.go:271) |
-| `AUTHPLANE_DATA_ENCRYPTION_VAULT_ADDRESS` | `data_encryption.vault_transit_encrypt.address` | `string` | — | driver is vault_transit_encrypt | [`internal/config/loader.go:272`](../../internal/config/loader.go:272) |
-| `AUTHPLANE_DATA_ENCRYPTION_VAULT_AUTH_METHOD` | `data_encryption.vault_transit_encrypt.auth_method` | `string` | — | — | [`internal/config/loader.go:273`](../../internal/config/loader.go:273) |
-| `AUTHPLANE_DATA_ENCRYPTION_VAULT_KEY_NAME` | `data_encryption.vault_transit_encrypt.key_name` | `string` | — | driver is vault_transit_encrypt | [`internal/config/loader.go:276`](../../internal/config/loader.go:276) |
-| `AUTHPLANE_DATA_ENCRYPTION_VAULT_MOUNT_PATH` | `data_encryption.vault_transit_encrypt.mount_path` | `string` | — | — | [`internal/config/loader.go:275`](../../internal/config/loader.go:275) |
-| `AUTHPLANE_DATA_ENCRYPTION_VAULT_ROLE_ID_ENV` | `data_encryption.vault_transit_encrypt.approle.role_id_env` | `string` | — | auth_method is approle | [`internal/config/loader.go:277`](../../internal/config/loader.go:277) |
-| `AUTHPLANE_DATA_ENCRYPTION_VAULT_SECRET_ID_ENV` | `data_encryption.vault_transit_encrypt.approle.secret_id_env` | `string` | — | auth_method is approle | [`internal/config/loader.go:278`](../../internal/config/loader.go:278) |
-| `AUTHPLANE_DATA_ENCRYPTION_VAULT_TOKEN_ENV` | `data_encryption.vault_transit_encrypt.token_env` | `string` | — | — | [`internal/config/loader.go:274`](../../internal/config/loader.go:274) |
-| `AUTHPLANE_DCR_APPROVED_REDIRECTS` | `dcr.approved_redirects` | `[]string` | — | — | [`internal/config/loader.go:319`](../../internal/config/loader.go:319) |
-| `AUTHPLANE_DCR_DEFAULT_REFRESH_EXPIRY` | `dcr.default_refresh_expiry` | `duration` | `168h` | — | [`internal/config/loader.go:323`](../../internal/config/loader.go:323) |
-| `AUTHPLANE_DCR_DEFAULT_TOKEN_EXPIRY` | `dcr.default_token_expiry` | `duration` | `15m` | — | [`internal/config/loader.go:322`](../../internal/config/loader.go:322) |
-| `AUTHPLANE_DCR_MODE` | `dcr.mode` | `string` | `open` | — | [`internal/config/loader.go:318`](../../internal/config/loader.go:318) |
-| `AUTHPLANE_DCR_RATE_LIMIT` | `dcr.rate_limit` | `float64` | `10` | — | [`internal/config/loader.go:320`](../../internal/config/loader.go:320) |
-| `AUTHPLANE_DCR_RATE_LIMIT_BURST` | `dcr.rate_limit_burst` | `int` | `20` | — | [`internal/config/loader.go:321`](../../internal/config/loader.go:321) |
-| `AUTHPLANE_DPOP_ENABLED` | `dpop.enabled` | `bool` | `false` | — | [`internal/config/loader.go:252`](../../internal/config/loader.go:252) |
-| `AUTHPLANE_DPOP_NONCE_TTL` | `dpop.nonce_ttl` | `duration` | `60s` | — | [`internal/config/loader.go:253`](../../internal/config/loader.go:253) |
-| `AUTHPLANE_DPOP_PROOF_LIFETIME` | `dpop.proof_lifetime` | `duration` | `60s` | — | [`internal/config/loader.go:254`](../../internal/config/loader.go:254) |
-| `AUTHPLANE_DPOP_REQUIRE_NONCE` | `dpop.require_nonce` | `bool` | — | — | [`internal/config/loader.go:255`](../../internal/config/loader.go:255) |
-| `AUTHPLANE_LOG_ADD_SOURCE` | `observability.logging.add_source` | `bool` | — | — | [`internal/config/loader.go:377`](../../internal/config/loader.go:377) |
-| `AUTHPLANE_LOG_FORMAT` | `observability.logging.format` | `string` | `json` | — | [`internal/config/loader.go:376`](../../internal/config/loader.go:376) |
-| `AUTHPLANE_LOG_LEVEL` | `observability.logging.level` | `string` | `info` | — | [`internal/config/loader.go:375`](../../internal/config/loader.go:375) |
-| `AUTHPLANE_LOG_OTEL` | `observability.logging.outputs.otel` | `bool` | — | — | [`internal/config/loader.go:379`](../../internal/config/loader.go:379) |
-| `AUTHPLANE_LOG_OTEL_ENDPOINT` | `observability.logging.outputs.otel_endpoint` | `string` | — | logging outputs otel is enabled | [`internal/config/loader.go:380`](../../internal/config/loader.go:380) |
-| `AUTHPLANE_LOG_OTEL_INSECURE` | `observability.logging.outputs.insecure` | `bool` | — | — | [`internal/config/loader.go:381`](../../internal/config/loader.go:381) |
-| `AUTHPLANE_LOG_STDOUT` | `observability.logging.outputs.stdout` | `bool` | `true` | — | [`internal/config/loader.go:378`](../../internal/config/loader.go:378) |
-| `AUTHPLANE_METRICS_INSECURE` | `observability.metrics.insecure` | `bool` | — | — | [`internal/config/loader.go:385`](../../internal/config/loader.go:385) |
-| `AUTHPLANE_METRICS_OTEL_ENDPOINT` | `observability.metrics.otel_endpoint` | `string` | — | metrics provider is otel or both | [`internal/config/loader.go:384`](../../internal/config/loader.go:384) |
-| `AUTHPLANE_METRICS_PATH` | `observability.metrics.path` | `string` | `/metrics` | — | [`internal/config/loader.go:383`](../../internal/config/loader.go:383) |
-| `AUTHPLANE_METRICS_PROVIDER` | `observability.metrics.provider` | `string` | `prometheus` | — | [`internal/config/loader.go:382`](../../internal/config/loader.go:382) |
-| `AUTHPLANE_OAUTH_REQUIRE_SCOPE` | `oauth.require_scope` | `bool` | `true` | — | [`internal/config/loader.go:358`](../../internal/config/loader.go:358) |
-| `AUTHPLANE_OIDC_CLIENT_ID` | `oidc.client_id` | `string` | — | oidc is enabled | [`internal/config/loader.go:364`](../../internal/config/loader.go:364) |
-| `AUTHPLANE_OIDC_CLIENT_SECRET` | `oidc.client_secret` | `string` | — | oidc is enabled | [`internal/config/loader.go:365`](../../internal/config/loader.go:365) |
-| `AUTHPLANE_OIDC_CONNECTOR_ID` | `oidc.connector_id` | `string` | — | — | [`internal/config/loader.go:371`](../../internal/config/loader.go:371) |
-| `AUTHPLANE_OIDC_DISPLAY_NAME` | `oidc.display_name` | `string` | — | — | [`internal/config/loader.go:366`](../../internal/config/loader.go:366) |
-| `AUTHPLANE_OIDC_ENABLED` | `oidc.enabled` | `bool` | — | — | [`internal/config/loader.go:362`](../../internal/config/loader.go:362) |
-| `AUTHPLANE_OIDC_INCLUDE_GROUPS_SCOPE` | `oidc.include_groups_scope` | `bool` | `true` | — | [`internal/config/loader.go:370`](../../internal/config/loader.go:370) |
-| `AUTHPLANE_OIDC_ISSUER` | `oidc.issuer` | `string` | — | oidc is enabled | [`internal/config/loader.go:363`](../../internal/config/loader.go:363) |
-| `AUTHPLANE_OIDC_REDIRECT_URI` | `oidc.redirect_uri` | `string` | — | oidc is enabled | [`internal/config/loader.go:368`](../../internal/config/loader.go:368) |
-| `AUTHPLANE_OIDC_SCOPES` | `oidc.scopes` | `[]string` | — | — | [`internal/config/loader.go:367`](../../internal/config/loader.go:367) |
-| `AUTHPLANE_OIDC_SHOW_LOCAL_LOGIN` | `oidc.show_local_login` | `bool` | `true` | — | [`internal/config/loader.go:369`](../../internal/config/loader.go:369) |
-| `AUTHPLANE_RATE_LIMIT_AUTH_FAIL_MAX` | `rate_limit.auth_fail_max` | `int` | `10` | — | [`internal/config/loader.go:346`](../../internal/config/loader.go:346) |
-| `AUTHPLANE_RATE_LIMIT_AUTH_FAIL_WINDOW` | `rate_limit.auth_fail_window` | `duration` | `10m` | — | [`internal/config/loader.go:347`](../../internal/config/loader.go:347) |
-| `AUTHPLANE_RATE_LIMIT_AUTH_LOCKOUT` | `rate_limit.auth_lockout` | `duration` | `15m` | — | [`internal/config/loader.go:348`](../../internal/config/loader.go:348) |
-| `AUTHPLANE_RATE_LIMIT_BURST` | `rate_limit.burst` | `int` | `200` | — | [`internal/config/loader.go:345`](../../internal/config/loader.go:345) |
-| `AUTHPLANE_RATE_LIMIT_ENABLED` | `rate_limit.enabled` | `bool` | `true` | — | [`internal/config/loader.go:343`](../../internal/config/loader.go:343) |
-| `AUTHPLANE_RATE_LIMIT_RPS` | `rate_limit.requests_per_second` | `float64` | `100` | — | [`internal/config/loader.go:344`](../../internal/config/loader.go:344) |
-| `AUTHPLANE_RESOURCE_SCOPES` | — | — | — | — | [`internal/config/loader.go:549`](../../internal/config/loader.go:549) |
-| `AUTHPLANE_RESOURCE_URI` | — | — | — | — | [`internal/config/loader.go:541`](../../internal/config/loader.go:541) |
-| `AUTHPLANE_SERVER_ADDRESS` | `server.address` | `string` | `:9000` | — | [`internal/config/loader.go:283`](../../internal/config/loader.go:283) |
-| `AUTHPLANE_SERVER_ALLOWED_ORIGINS` | `server.allowed_origins` | `[]string` | — | — | [`internal/config/loader.go:288`](../../internal/config/loader.go:288) |
-| `AUTHPLANE_SERVER_IDLE_TIMEOUT` | `server.idle_timeout` | `duration` | `120s` | — | [`internal/config/loader.go:286`](../../internal/config/loader.go:286) |
-| `AUTHPLANE_SERVER_ISSUER` | `server.issuer` | `string` | `http://localhost:9000` | — | [`internal/config/loader.go:282`](../../internal/config/loader.go:282) |
-| `AUTHPLANE_SERVER_READ_TIMEOUT` | `server.read_timeout` | `duration` | `30s` | — | [`internal/config/loader.go:284`](../../internal/config/loader.go:284) |
-| `AUTHPLANE_SERVER_SHUTDOWN_WAIT` | `server.shutdown_wait` | `duration` | `10s` | — | [`internal/config/loader.go:287`](../../internal/config/loader.go:287) |
-| `AUTHPLANE_SERVER_WRITE_TIMEOUT` | `server.write_timeout` | `duration` | `30s` | — | [`internal/config/loader.go:285`](../../internal/config/loader.go:285) |
-| `AUTHPLANE_SESSION_COOKIE_NAME` | `session.cookie_name` | `string` | `authserver_session` | — | [`internal/config/loader.go:334`](../../internal/config/loader.go:334) |
-| `AUTHPLANE_SESSION_FAIL_CLOSED` | `session.fail_closed` | `bool` | `true` | — | [`internal/config/loader.go:339`](../../internal/config/loader.go:339) |
-| `AUTHPLANE_SESSION_MAX_AGE` | `session.max_age` | `duration` | `24h` | — | [`internal/config/loader.go:335`](../../internal/config/loader.go:335) |
-| `AUTHPLANE_SESSION_SAME_SITE` | `session.same_site` | `string` | `lax` | — | [`internal/config/loader.go:337`](../../internal/config/loader.go:337) |
-| `AUTHPLANE_SESSION_SECRET` | `session.secret` | `string` | — | server.issuer is not localhost | [`internal/config/loader.go:338`](../../internal/config/loader.go:338) |
-| `AUTHPLANE_SESSION_SECURE` | `session.secure` | `bool` | `false` | — | [`internal/config/loader.go:336`](../../internal/config/loader.go:336) |
-| `AUTHPLANE_SIGNING_ALGORITHM` | `signing.algorithm` | `string` | `ES256` | — | [`internal/config/loader.go:303`](../../internal/config/loader.go:303) |
-| `AUTHPLANE_SIGNING_KEY_PATH` | `signing.key_path` | `string` | `data/keys` | key_store is keyfile | [`internal/config/loader.go:305`](../../internal/config/loader.go:305) |
-| `AUTHPLANE_SIGNING_KEY_STORE` | `signing.key_store` | `string` | `keyfile` | — | [`internal/config/loader.go:304`](../../internal/config/loader.go:304) |
-| `AUTHPLANE_SIGNING_PG_ENCRYPTION_KEY_ENV` | `signing.postgres_key.encryption_key_env` | `string` | — | — | [`internal/config/loader.go:314`](../../internal/config/loader.go:314) |
-| `AUTHPLANE_STORAGE_DRIVER` | `storage.driver` | `string` | `sqlite` | — | [`internal/config/loader.go:292`](../../internal/config/loader.go:292) |
-| `AUTHPLANE_STORAGE_POSTGRES_DSN` | `storage.postgres.dsn` | `string` | — | driver is postgres | [`internal/config/loader.go:295`](../../internal/config/loader.go:295) |
-| `AUTHPLANE_STORAGE_POSTGRES_MAX_CONNS` | `storage.postgres.max_conns` | `int` | `25` | — | [`internal/config/loader.go:296`](../../internal/config/loader.go:296) |
-| `AUTHPLANE_STORAGE_POSTGRES_MAX_CONN_IDLE_TIME` | `storage.postgres.max_conn_idle_time` | `duration` | `30m` | — | [`internal/config/loader.go:299`](../../internal/config/loader.go:299) |
-| `AUTHPLANE_STORAGE_POSTGRES_MAX_CONN_LIFETIME` | `storage.postgres.max_conn_lifetime` | `duration` | `1h` | — | [`internal/config/loader.go:298`](../../internal/config/loader.go:298) |
-| `AUTHPLANE_STORAGE_POSTGRES_MIN_CONNS` | `storage.postgres.min_conns` | `int` | `5` | — | [`internal/config/loader.go:297`](../../internal/config/loader.go:297) |
-| `AUTHPLANE_STORAGE_SQLITE_PATH` | `storage.sqlite.path` | `string` | `data/authserver.db` | driver is sqlite | [`internal/config/loader.go:293`](../../internal/config/loader.go:293) |
-| `AUTHPLANE_STORAGE_SQLITE_WAL` | `storage.sqlite.wal` | `bool` | `true` | — | [`internal/config/loader.go:294`](../../internal/config/loader.go:294) |
-| `AUTHPLANE_TOKEN_EXCHANGE_ALLOW_SELF_EXCHANGE` | `token_exchange.allow_self_exchange` | `bool` | — | — | [`internal/config/loader.go:260`](../../internal/config/loader.go:260) |
-| `AUTHPLANE_TOKEN_EXCHANGE_ENABLED` | `token_exchange.enabled` | `bool` | `false` | — | [`internal/config/loader.go:259`](../../internal/config/loader.go:259) |
-| `AUTHPLANE_TOKEN_EXCHANGE_MAX_CHAIN_DEPTH` | `token_exchange.max_chain_depth` | `int` | `5` | — | [`internal/config/loader.go:261`](../../internal/config/loader.go:261) |
-| `AUTHPLANE_TOKEN_EXCHANGE_TOKEN_EXPIRY` | `token_exchange.token_expiry` | `duration` | `1h` | — | [`internal/config/loader.go:262`](../../internal/config/loader.go:262) |
-| `AUTHPLANE_TRACING_ENABLED` | `observability.tracing.enabled` | `bool` | `false` | — | [`internal/config/loader.go:386`](../../internal/config/loader.go:386) |
-| `AUTHPLANE_TRACING_ENDPOINT` | `observability.tracing.endpoint` | `string` | — | tracing is enabled | [`internal/config/loader.go:387`](../../internal/config/loader.go:387) |
-| `AUTHPLANE_TRACING_INSECURE` | `observability.tracing.insecure` | `bool` | — | — | [`internal/config/loader.go:388`](../../internal/config/loader.go:388) |
-| `AUTHPLANE_TRACING_SAMPLE_RATE` | `observability.tracing.sample_rate` | `float64` | `1.0` | — | [`internal/config/loader.go:389`](../../internal/config/loader.go:389) |
-| `AUTHPLANE_VAULT_ADDR` | `signing.vault_transit.address` | `string` | — | key_store is vault_transit | [`internal/config/loader.go:306`](../../internal/config/loader.go:306) |
-| `AUTHPLANE_VAULT_APPROLE_MOUNT` | `signing.vault_transit.approle.mount` | `string` | — | — | [`internal/config/loader.go:313`](../../internal/config/loader.go:313) |
-| `AUTHPLANE_VAULT_APPROLE_ROLE_ID` | `signing.vault_transit.approle.role_id` | `string` | — | — | [`internal/config/loader.go:311`](../../internal/config/loader.go:311) |
-| `AUTHPLANE_VAULT_APPROLE_SECRET_ID` | `signing.vault_transit.approle.secret_id` | `string` | — | role_id is set | [`internal/config/loader.go:312`](../../internal/config/loader.go:312) |
-| `AUTHPLANE_VAULT_TIMEOUT` | `signing.vault_transit.timeout` | `duration` | `10s` | — | [`internal/config/loader.go:310`](../../internal/config/loader.go:310) |
-| `AUTHPLANE_VAULT_TOKEN` | `signing.vault_transit.token` | `string` | — | — | [`internal/config/loader.go:307`](../../internal/config/loader.go:307) |
-| `AUTHPLANE_VAULT_TRANSIT_KEY_NAME` | `signing.vault_transit.key_name` | `string` | `authserver-signing` | — | [`internal/config/loader.go:309`](../../internal/config/loader.go:309) |
-| `AUTHPLANE_VAULT_TRANSIT_MOUNT` | `signing.vault_transit.mount` | `string` | `transit` | — | [`internal/config/loader.go:308`](../../internal/config/loader.go:308) |
+| `AUTHPLANE_ADMIN_ADDRESS` | `admin.address` | `string` | `:9001` | — | [`internal/config/loader.go:472`](../../internal/config/loader.go:472) |
+| `AUTHPLANE_ADMIN_API_KEY` | `admin.api_key` | `string` | — | admin is enabled and server.issuer is not localhost | [`internal/config/loader.go:473`](../../internal/config/loader.go:473) |
+| `AUTHPLANE_ADMIN_AUDIT_DEFAULT_LOOKBACK` | `admin.audit_default_lookback` | `duration` | `24h` | — | [`internal/config/loader.go:478`](../../internal/config/loader.go:478) |
+| `AUTHPLANE_ADMIN_AUDIT_MAX_LOOKBACK` | `admin.audit_max_lookback` | `duration` | `720h` | — | [`internal/config/loader.go:483`](../../internal/config/loader.go:483) |
+| `AUTHPLANE_ADMIN_ENABLED` | `admin.enabled` | `bool` | `true` | — | [`internal/config/loader.go:471`](../../internal/config/loader.go:471) |
+| `AUTHPLANE_AGENTS_ENABLE_JWKS_LISTING` | `agents.enable_jwks_listing` | `bool` | — | — | [`internal/config/loader.go:356`](../../internal/config/loader.go:356) |
+| `AUTHPLANE_BROKER_PROVIDER_AUTHORIZE_URL` | — | — | — | — | [`internal/config/loader.go:642`](../../internal/config/loader.go:642) |
+| `AUTHPLANE_BROKER_PROVIDER_CLIENT_ID` | — | — | — | — | [`internal/config/loader.go:632`](../../internal/config/loader.go:632) |
+| `AUTHPLANE_BROKER_PROVIDER_CLIENT_SECRET_ENV` | — | — | — | — | [`internal/config/loader.go:637`](../../internal/config/loader.go:637) |
+| `AUTHPLANE_BROKER_PROVIDER_CLIENT_SECRET_REF` | — | — | — | — | [`internal/config/loader.go:635`](../../internal/config/loader.go:635) |
+| `AUTHPLANE_BROKER_PROVIDER_DISPLAY_NAME` | — | — | — | — | [`internal/config/loader.go:626`](../../internal/config/loader.go:626) |
+| `AUTHPLANE_BROKER_PROVIDER_PROTOCOL` | — | — | — | — | [`internal/config/loader.go:627`](../../internal/config/loader.go:627) |
+| `AUTHPLANE_BROKER_PROVIDER_RESPONSE_FORMAT` | — | — | — | — | [`internal/config/loader.go:648`](../../internal/config/loader.go:648) |
+| `AUTHPLANE_BROKER_PROVIDER_SLUG` | — | — | — | — | [`internal/config/loader.go:619`](../../internal/config/loader.go:619) |
+| `AUTHPLANE_BROKER_PROVIDER_TOKEN_URL` | — | — | — | — | [`internal/config/loader.go:645`](../../internal/config/loader.go:645) |
+| `AUTHPLANE_CIMD_ALLOW_PRIVATE_ADDRESSES` | `cimd.allow_private_addresses` | `bool` | `false` | — | [`internal/config/loader.go:419`](../../internal/config/loader.go:419) |
+| `AUTHPLANE_CIMD_CACHE_TTL` | `cimd.cache_ttl` | `duration` | `1h` | — | [`internal/config/loader.go:420`](../../internal/config/loader.go:420) |
+| `AUTHPLANE_CIMD_ENABLED` | `cimd.enabled` | `bool` | `true` | — | [`internal/config/loader.go:417`](../../internal/config/loader.go:417) |
+| `AUTHPLANE_CIMD_FETCH_TIMEOUT` | `cimd.fetch_timeout` | `duration` | `10s` | — | [`internal/config/loader.go:421`](../../internal/config/loader.go:421) |
+| `AUTHPLANE_CIMD_REQUIRE_HTTPS` | `cimd.require_https` | `bool` | `true` | — | [`internal/config/loader.go:418`](../../internal/config/loader.go:418) |
+| `AUTHPLANE_CLIENT_CREDENTIALS_ENABLED` | `client_credentials.enabled` | `bool` | `true` | — | [`internal/config/loader.go:337`](../../internal/config/loader.go:337) |
+| `AUTHPLANE_CLIENT_CREDENTIALS_TOKEN_EXPIRY` | `client_credentials.token_expiry` | `duration` | `1h` | — | [`internal/config/loader.go:338`](../../internal/config/loader.go:338) |
+| `AUTHPLANE_CLIENT_SECRET_PEPPER` | `client_secret_pepper` | `string` | — | — | [`internal/config/loader.go:332`](../../internal/config/loader.go:332) |
+| `AUTHPLANE_CONNECT_ALLOWED_RETURN_URLS` | `connect.allowed_return_urls` | `[]string` | — | — | [`internal/config/loader.go:608`](../../internal/config/loader.go:608) |
+| `AUTHPLANE_CONNECT_REDIRECT_BASE_URL` | `connect.redirect_base_url` | `string` | — | — | [`internal/config/loader.go:607`](../../internal/config/loader.go:607) |
+| `AUTHPLANE_CONNECT_STATE_SECRET` | `connect.state_secret` | `string` | — | — | [`internal/config/loader.go:606`](../../internal/config/loader.go:606) |
+| `AUTHPLANE_DATA_ENCRYPTION_DRIVER` | `data_encryption.driver` | `string` | — | — | [`internal/config/loader.go:360`](../../internal/config/loader.go:360) |
+| `AUTHPLANE_DATA_ENCRYPTION_KEY_ENV` | `data_encryption.aes_master.key_env` | `string` | — | — | [`internal/config/loader.go:361`](../../internal/config/loader.go:361) |
+| `AUTHPLANE_DATA_ENCRYPTION_VAULT_ADDRESS` | `data_encryption.vault_transit_encrypt.address` | `string` | — | driver is vault_transit_encrypt | [`internal/config/loader.go:362`](../../internal/config/loader.go:362) |
+| `AUTHPLANE_DATA_ENCRYPTION_VAULT_AUTH_METHOD` | `data_encryption.vault_transit_encrypt.auth_method` | `string` | — | — | [`internal/config/loader.go:363`](../../internal/config/loader.go:363) |
+| `AUTHPLANE_DATA_ENCRYPTION_VAULT_KEY_NAME` | `data_encryption.vault_transit_encrypt.key_name` | `string` | — | driver is vault_transit_encrypt | [`internal/config/loader.go:366`](../../internal/config/loader.go:366) |
+| `AUTHPLANE_DATA_ENCRYPTION_VAULT_MOUNT_PATH` | `data_encryption.vault_transit_encrypt.mount_path` | `string` | — | — | [`internal/config/loader.go:365`](../../internal/config/loader.go:365) |
+| `AUTHPLANE_DATA_ENCRYPTION_VAULT_ROLE_ID_ENV` | `data_encryption.vault_transit_encrypt.approle.role_id_env` | `string` | — | auth_method is approle | [`internal/config/loader.go:367`](../../internal/config/loader.go:367) |
+| `AUTHPLANE_DATA_ENCRYPTION_VAULT_SECRET_ID_ENV` | `data_encryption.vault_transit_encrypt.approle.secret_id_env` | `string` | — | auth_method is approle | [`internal/config/loader.go:368`](../../internal/config/loader.go:368) |
+| `AUTHPLANE_DATA_ENCRYPTION_VAULT_TOKEN_ENV` | `data_encryption.vault_transit_encrypt.token_env` | `string` | — | — | [`internal/config/loader.go:364`](../../internal/config/loader.go:364) |
+| `AUTHPLANE_DCR_APPROVED_REDIRECTS` | `dcr.approved_redirects` | `[]string` | — | — | [`internal/config/loader.go:409`](../../internal/config/loader.go:409) |
+| `AUTHPLANE_DCR_DEFAULT_REFRESH_EXPIRY` | `dcr.default_refresh_expiry` | `duration` | `168h` | — | [`internal/config/loader.go:413`](../../internal/config/loader.go:413) |
+| `AUTHPLANE_DCR_DEFAULT_TOKEN_EXPIRY` | `dcr.default_token_expiry` | `duration` | `15m` | — | [`internal/config/loader.go:412`](../../internal/config/loader.go:412) |
+| `AUTHPLANE_DCR_MODE` | `dcr.mode` | `string` | `open` | — | [`internal/config/loader.go:408`](../../internal/config/loader.go:408) |
+| `AUTHPLANE_DCR_RATE_LIMIT` | `dcr.rate_limit` | `float64` | `10` | — | [`internal/config/loader.go:410`](../../internal/config/loader.go:410) |
+| `AUTHPLANE_DCR_RATE_LIMIT_BURST` | `dcr.rate_limit_burst` | `int` | `20` | — | [`internal/config/loader.go:411`](../../internal/config/loader.go:411) |
+| `AUTHPLANE_DPOP_ENABLED` | `dpop.enabled` | `bool` | `true` | — | [`internal/config/loader.go:342`](../../internal/config/loader.go:342) |
+| `AUTHPLANE_DPOP_NONCE_TTL` | `dpop.nonce_ttl` | `duration` | `60s` | — | [`internal/config/loader.go:343`](../../internal/config/loader.go:343) |
+| `AUTHPLANE_DPOP_PROOF_LIFETIME` | `dpop.proof_lifetime` | `duration` | `60s` | — | [`internal/config/loader.go:344`](../../internal/config/loader.go:344) |
+| `AUTHPLANE_DPOP_REQUIRE_NONCE` | `dpop.require_nonce` | `bool` | — | — | [`internal/config/loader.go:345`](../../internal/config/loader.go:345) |
+| `AUTHPLANE_LOG_ADD_SOURCE` | `observability.logging.add_source` | `bool` | — | — | [`internal/config/loader.go:518`](../../internal/config/loader.go:518) |
+| `AUTHPLANE_LOG_FORMAT` | `observability.logging.format` | `string` | `json` | — | [`internal/config/loader.go:517`](../../internal/config/loader.go:517) |
+| `AUTHPLANE_LOG_LEVEL` | `observability.logging.level` | `string` | `info` | — | [`internal/config/loader.go:516`](../../internal/config/loader.go:516) |
+| `AUTHPLANE_LOG_OTEL` | `observability.logging.outputs.otel` | `bool` | — | — | [`internal/config/loader.go:520`](../../internal/config/loader.go:520) |
+| `AUTHPLANE_LOG_OTEL_ENDPOINT` | `observability.logging.outputs.otel_endpoint` | `string` | — | logging outputs otel is enabled | [`internal/config/loader.go:521`](../../internal/config/loader.go:521) |
+| `AUTHPLANE_LOG_OTEL_INSECURE` | `observability.logging.outputs.insecure` | `bool` | — | — | [`internal/config/loader.go:522`](../../internal/config/loader.go:522) |
+| `AUTHPLANE_LOG_STDOUT` | `observability.logging.outputs.stdout` | `bool` | `true` | — | [`internal/config/loader.go:519`](../../internal/config/loader.go:519) |
+| `AUTHPLANE_METRICS_INSECURE` | `observability.metrics.insecure` | `bool` | — | — | [`internal/config/loader.go:526`](../../internal/config/loader.go:526) |
+| `AUTHPLANE_METRICS_OTEL_ENDPOINT` | `observability.metrics.otel_endpoint` | `string` | — | metrics provider is otel or both | [`internal/config/loader.go:525`](../../internal/config/loader.go:525) |
+| `AUTHPLANE_METRICS_PATH` | `observability.metrics.path` | `string` | `/metrics` | — | [`internal/config/loader.go:524`](../../internal/config/loader.go:524) |
+| `AUTHPLANE_METRICS_PROVIDER` | `observability.metrics.provider` | `string` | `prometheus` | — | [`internal/config/loader.go:523`](../../internal/config/loader.go:523) |
+| `AUTHPLANE_OAUTH_REQUIRE_SCOPE` | `oauth.require_scope` | `bool` | `true` | — | [`internal/config/loader.go:491`](../../internal/config/loader.go:491) |
+| `AUTHPLANE_OAUTH_STATE_MAX_AGE` | `oauth.state_max_age` | `duration` | `10m` | — | [`internal/config/loader.go:494`](../../internal/config/loader.go:494) |
+| `AUTHPLANE_OIDC_CLIENT_ID` | `oidc.client_id` | `string` | — | oidc is enabled | [`internal/config/loader.go:505`](../../internal/config/loader.go:505) |
+| `AUTHPLANE_OIDC_CLIENT_SECRET` | `oidc.client_secret` | `string` | — | — | [`internal/config/loader.go:506`](../../internal/config/loader.go:506) |
+| `AUTHPLANE_OIDC_CONNECTOR_ID` | `oidc.connector_id` | `string` | — | — | [`internal/config/loader.go:512`](../../internal/config/loader.go:512) |
+| `AUTHPLANE_OIDC_DISPLAY_NAME` | `oidc.display_name` | `string` | — | — | [`internal/config/loader.go:507`](../../internal/config/loader.go:507) |
+| `AUTHPLANE_OIDC_ENABLED` | `oidc.enabled` | `bool` | — | — | [`internal/config/loader.go:503`](../../internal/config/loader.go:503) |
+| `AUTHPLANE_OIDC_INCLUDE_GROUPS_SCOPE` | `oidc.include_groups_scope` | `bool` | `true` | — | [`internal/config/loader.go:511`](../../internal/config/loader.go:511) |
+| `AUTHPLANE_OIDC_ISSUER` | `oidc.issuer` | `string` | — | oidc is enabled | [`internal/config/loader.go:504`](../../internal/config/loader.go:504) |
+| `AUTHPLANE_OIDC_REDIRECT_URI` | `oidc.redirect_uri` | `string` | — | oidc is enabled | [`internal/config/loader.go:509`](../../internal/config/loader.go:509) |
+| `AUTHPLANE_OIDC_SCOPES` | `oidc.scopes` | `[]string` | — | — | [`internal/config/loader.go:508`](../../internal/config/loader.go:508) |
+| `AUTHPLANE_OIDC_SHOW_LOCAL_LOGIN` | `oidc.show_local_login` | `bool` | `true` | — | [`internal/config/loader.go:510`](../../internal/config/loader.go:510) |
+| `AUTHPLANE_RATE_LIMIT_AUTH_FAIL_MAX` | `rate_limit.auth_fail_max` | `int` | `10` | — | [`internal/config/loader.go:464`](../../internal/config/loader.go:464) |
+| `AUTHPLANE_RATE_LIMIT_AUTH_FAIL_WINDOW` | `rate_limit.auth_fail_window` | `duration` | `10m` | — | [`internal/config/loader.go:465`](../../internal/config/loader.go:465) |
+| `AUTHPLANE_RATE_LIMIT_AUTH_LOCKOUT` | `rate_limit.auth_lockout` | `duration` | `15m` | — | [`internal/config/loader.go:466`](../../internal/config/loader.go:466) |
+| `AUTHPLANE_RATE_LIMIT_BURST` | `rate_limit.burst` | `int` | `200` | — | [`internal/config/loader.go:463`](../../internal/config/loader.go:463) |
+| `AUTHPLANE_RATE_LIMIT_ENABLED` | `rate_limit.enabled` | `bool` | `true` | — | [`internal/config/loader.go:461`](../../internal/config/loader.go:461) |
+| `AUTHPLANE_RATE_LIMIT_MAX_TRACKED_IDENTITIES` | `rate_limit.max_tracked_identities` | `int` | `250000` | — | [`internal/config/loader.go:467`](../../internal/config/loader.go:467) |
+| `AUTHPLANE_RATE_LIMIT_RPS` | `rate_limit.requests_per_second` | `float64` | `100` | — | [`internal/config/loader.go:462`](../../internal/config/loader.go:462) |
+| `AUTHPLANE_RESOURCE_SCOPES` | — | — | — | — | [`internal/config/loader.go:712`](../../internal/config/loader.go:712) |
+| `AUTHPLANE_RESOURCE_URI` | — | — | — | — | [`internal/config/loader.go:704`](../../internal/config/loader.go:704) |
+| `AUTHPLANE_SERVER_ADDRESS` | `server.address` | `string` | `:9000` | — | [`internal/config/loader.go:373`](../../internal/config/loader.go:373) |
+| `AUTHPLANE_SERVER_ALLOWED_ORIGINS` | `server.allowed_origins` | `[]string` | — | — | [`internal/config/loader.go:378`](../../internal/config/loader.go:378) |
+| `AUTHPLANE_SERVER_IDLE_TIMEOUT` | `server.idle_timeout` | `duration` | `120s` | — | [`internal/config/loader.go:376`](../../internal/config/loader.go:376) |
+| `AUTHPLANE_SERVER_ISSUER` | `server.issuer` | `string` | `http://localhost:9000` | — | [`internal/config/loader.go:372`](../../internal/config/loader.go:372) |
+| `AUTHPLANE_SERVER_READ_TIMEOUT` | `server.read_timeout` | `duration` | `30s` | — | [`internal/config/loader.go:374`](../../internal/config/loader.go:374) |
+| `AUTHPLANE_SERVER_SHUTDOWN_WAIT` | `server.shutdown_wait` | `duration` | `10s` | — | [`internal/config/loader.go:377`](../../internal/config/loader.go:377) |
+| `AUTHPLANE_SERVER_WRITE_TIMEOUT` | `server.write_timeout` | `duration` | `30s` | — | [`internal/config/loader.go:375`](../../internal/config/loader.go:375) |
+| `AUTHPLANE_SESSION_COOKIE_NAME` | `session.cookie_name` | `string` | `authserver_session` | — | [`internal/config/loader.go:442`](../../internal/config/loader.go:442) |
+| `AUTHPLANE_SESSION_FAIL_CLOSED` | `session.fail_closed` | `bool` | `true` | — | [`internal/config/loader.go:456`](../../internal/config/loader.go:456) |
+| `AUTHPLANE_SESSION_MAX_AGE` | `session.max_age` | `duration` | `24h` | — | [`internal/config/loader.go:448`](../../internal/config/loader.go:448) |
+| `AUTHPLANE_SESSION_SAME_SITE` | `session.same_site` | `string` | `lax` | — | [`internal/config/loader.go:454`](../../internal/config/loader.go:454) |
+| `AUTHPLANE_SESSION_SECRET` | `session.secret` | `string` | — | server.issuer is not localhost | [`internal/config/loader.go:455`](../../internal/config/loader.go:455) |
+| `AUTHPLANE_SESSION_SECURE` | `session.secure` | `bool` | `false` | — | [`internal/config/loader.go:453`](../../internal/config/loader.go:453) |
+| `AUTHPLANE_SIGNING_ALGORITHM` | `signing.algorithm` | `string` | `ES256` | — | [`internal/config/loader.go:393`](../../internal/config/loader.go:393) |
+| `AUTHPLANE_SIGNING_KEY_PATH` | `signing.key_path` | `string` | `data/keys` | key_store is keyfile | [`internal/config/loader.go:395`](../../internal/config/loader.go:395) |
+| `AUTHPLANE_SIGNING_KEY_STORE` | `signing.key_store` | `string` | `keyfile` | — | [`internal/config/loader.go:394`](../../internal/config/loader.go:394) |
+| `AUTHPLANE_SIGNING_PG_ENCRYPTION_KEY_ENV` | `signing.postgres_key.encryption_key_env` | `string` | — | — | [`internal/config/loader.go:404`](../../internal/config/loader.go:404) |
+| `AUTHPLANE_STORAGE_DRIVER` | `storage.driver` | `string` | `sqlite` | — | [`internal/config/loader.go:382`](../../internal/config/loader.go:382) |
+| `AUTHPLANE_STORAGE_POSTGRES_DSN` | `storage.postgres.dsn` | `string` | — | driver is postgres | [`internal/config/loader.go:385`](../../internal/config/loader.go:385) |
+| `AUTHPLANE_STORAGE_POSTGRES_MAX_CONNS` | `storage.postgres.max_conns` | `int` | `25` | — | [`internal/config/loader.go:386`](../../internal/config/loader.go:386) |
+| `AUTHPLANE_STORAGE_POSTGRES_MAX_CONN_IDLE_TIME` | `storage.postgres.max_conn_idle_time` | `duration` | `30m` | — | [`internal/config/loader.go:389`](../../internal/config/loader.go:389) |
+| `AUTHPLANE_STORAGE_POSTGRES_MAX_CONN_LIFETIME` | `storage.postgres.max_conn_lifetime` | `duration` | `1h` | — | [`internal/config/loader.go:388`](../../internal/config/loader.go:388) |
+| `AUTHPLANE_STORAGE_POSTGRES_MIN_CONNS` | `storage.postgres.min_conns` | `int` | `5` | — | [`internal/config/loader.go:387`](../../internal/config/loader.go:387) |
+| `AUTHPLANE_STORAGE_SQLITE_PATH` | `storage.sqlite.path` | `string` | `data/authserver.db` | driver is sqlite | [`internal/config/loader.go:383`](../../internal/config/loader.go:383) |
+| `AUTHPLANE_STORAGE_SQLITE_WAL` | `storage.sqlite.wal` | `bool` | `true` | — | [`internal/config/loader.go:384`](../../internal/config/loader.go:384) |
+| `AUTHPLANE_TOKEN_EXCHANGE_ALLOW_SELF_EXCHANGE` | `token_exchange.allow_self_exchange` | `bool` | — | — | [`internal/config/loader.go:350`](../../internal/config/loader.go:350) |
+| `AUTHPLANE_TOKEN_EXCHANGE_ENABLED` | `token_exchange.enabled` | `bool` | `true` | — | [`internal/config/loader.go:349`](../../internal/config/loader.go:349) |
+| `AUTHPLANE_TOKEN_EXCHANGE_MAX_CHAIN_DEPTH` | `token_exchange.max_chain_depth` | `int` | `5` | — | [`internal/config/loader.go:351`](../../internal/config/loader.go:351) |
+| `AUTHPLANE_TOKEN_EXCHANGE_TOKEN_EXPIRY` | `token_exchange.token_expiry` | `duration` | `1h` | — | [`internal/config/loader.go:352`](../../internal/config/loader.go:352) |
+| `AUTHPLANE_TRACING_ENABLED` | `observability.tracing.enabled` | `bool` | `false` | — | [`internal/config/loader.go:527`](../../internal/config/loader.go:527) |
+| `AUTHPLANE_TRACING_ENDPOINT` | `observability.tracing.endpoint` | `string` | — | tracing is enabled | [`internal/config/loader.go:528`](../../internal/config/loader.go:528) |
+| `AUTHPLANE_TRACING_INSECURE` | `observability.tracing.insecure` | `bool` | — | — | [`internal/config/loader.go:529`](../../internal/config/loader.go:529) |
+| `AUTHPLANE_TRACING_SAMPLE_RATE` | `observability.tracing.sample_rate` | `float64` | `1.0` | — | [`internal/config/loader.go:530`](../../internal/config/loader.go:530) |
+| `AUTHPLANE_VAULT_ADDR` | `signing.vault_transit.address` | `string` | — | key_store is vault_transit | [`internal/config/loader.go:396`](../../internal/config/loader.go:396) |
+| `AUTHPLANE_VAULT_APPROLE_MOUNT` | `signing.vault_transit.approle.mount` | `string` | — | — | [`internal/config/loader.go:403`](../../internal/config/loader.go:403) |
+| `AUTHPLANE_VAULT_APPROLE_ROLE_ID` | `signing.vault_transit.approle.role_id` | `string` | — | — | [`internal/config/loader.go:401`](../../internal/config/loader.go:401) |
+| `AUTHPLANE_VAULT_APPROLE_SECRET_ID` | `signing.vault_transit.approle.secret_id` | `string` | — | role_id is set | [`internal/config/loader.go:402`](../../internal/config/loader.go:402) |
+| `AUTHPLANE_VAULT_TIMEOUT` | `signing.vault_transit.timeout` | `duration` | `10s` | — | [`internal/config/loader.go:400`](../../internal/config/loader.go:400) |
+| `AUTHPLANE_VAULT_TOKEN` | `signing.vault_transit.token` | `string` | — | — | [`internal/config/loader.go:397`](../../internal/config/loader.go:397) |
+| `AUTHPLANE_VAULT_TRANSIT_KEY_NAME` | `signing.vault_transit.key_name` | `string` | `authserver-signing` | — | [`internal/config/loader.go:399`](../../internal/config/loader.go:399) |
+| `AUTHPLANE_VAULT_TRANSIT_MOUNT` | `signing.vault_transit.mount` | `string` | `transit` | — | [`internal/config/loader.go:398`](../../internal/config/loader.go:398) |
+| `AUTHPLANE_XAA_ENABLED` | `xaa.enabled` | `bool` | `true` | — | [`internal/config/loader.go:433`](../../internal/config/loader.go:433) |
+| `AUTHPLANE_XAA_JWKS_CACHE_TTL` | `xaa.jwks_cache_ttl` | `duration` | `1h` | — | [`internal/config/loader.go:438`](../../internal/config/loader.go:438) |
+| `AUTHPLANE_XAA_MAX_ASSERTION_AGE` | `xaa.max_assertion_age` | `duration` | `5m` | — | [`internal/config/loader.go:435`](../../internal/config/loader.go:435) |
+| `AUTHPLANE_XAA_REQUIRE_RESOURCE` | `xaa.require_resource` | `bool` | `false` | — | [`internal/config/loader.go:436`](../../internal/config/loader.go:436) |
+| `AUTHPLANE_XAA_SUBJECT_MODE` | `xaa.subject_mode` | `string` | `auto_map` | — | [`internal/config/loader.go:437`](../../internal/config/loader.go:437) |
+| `AUTHPLANE_XAA_TOKEN_EXPIRY` | `xaa.token_expiry` | `duration` | `1h` | — | [`internal/config/loader.go:434`](../../internal/config/loader.go:434) |

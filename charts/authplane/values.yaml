@@ -88,8 +88,10 @@ config:
   # -- Client ID Metadata Document (CIMD) handling.
   cimd:
     enabled: true
-    # -- Require HTTPS for CIMD fetch URLs
+    # -- Require HTTPS for CIMD fetch URLs. Governs the scheme only.
     require_https: true
+    # -- Turn off SSRF address filtering for CIMD fetches (loopback, RFC 1918, cloud metadata). Local development only; the server refuses to boot with it on unless server.issuer is localhost.
+    allow_private_addresses: false
     # -- Cache TTL for fetched CIMD documents
     cache_ttl: 1h
     # -- HTTP timeout for CIMD fetches
@@ -113,6 +115,7 @@ config:
     auth_fail_max: 10
     auth_fail_window: 10m
     auth_lockout: 15m
+    max_tracked_identities: 250000
   admin:
     enabled: true
     address: ":9001"
@@ -126,11 +129,11 @@ config:
     issuer: ""
     # -- OAuth client ID from the upstream provider
     client_id: ""
-    # -- OAuth client secret (prefer existingSecret or client_secret_env for production)
+    # -- OAuth client secret (prefer existingSecret or client_secret_ref for production)
     client_secret: ""
     # -- Env var name holding the client secret (takes precedence over client_secret).
     # Leave empty when using client_secret directly.
-    client_secret_env: ""
+    client_secret_ref: ""
     # -- Button text on the login page
     display_name: ""
     # -- OIDC scopes to request
@@ -140,7 +143,7 @@ config:
       - profile
     # -- Callback URL. Defaults to {server.issuer}/oidc/callback
     redirect_uri: ""
-    # -- Show local email/password login alongside the OIDC button
+    # -- Local email/password login alongside the OIDC button. false disables it entirely: the form is hidden and POST /login answers 404.
     show_local_login: true
     # -- Auto-add "groups" scope if upstream supports it (Okta: yes, Google: no)
     include_groups_scope: false
@@ -148,17 +151,17 @@ config:
     connector_id: ""
   # -- Client credentials grant (RFC 6749 Section 4.4) for machine-to-machine tokens.
   client_credentials:
-    enabled: false
+    enabled: true
     token_expiry: 1h
   # -- DPoP proof-of-possession (RFC 9449).
   dpop:
-    enabled: false
+    enabled: true
     nonce_ttl: 60s
     proof_lifetime: 60s
     require_nonce: false
   # -- Token exchange (RFC 8693) for delegation and scope narrowing.
   token_exchange:
-    enabled: false
+    enabled: true
     allow_self_exchange: false
     max_chain_depth: 5
     token_expiry: 1h
@@ -171,10 +174,12 @@ config:
   # Trusted IdPs issue ID-JAG assertions exchanged for access tokens via JWT bearer grant.
   # Configure IdPs at runtime via Admin API: POST /admin/idps
   xaa:
-    enabled: false
+    enabled: true
     token_expiry: 1h
     max_assertion_age: 5m
-    # -- Require the `resource` claim in incoming ID-JAG assertions.
+    # -- Refuse exchanges that name no resource, on the ID-JAG assertion
+    # or the token request. Needs an appVersion that ships the check;
+    # earlier images parse this key and ignore it.
     require_resource: false
     subject_mode: auto_map
     jwks_cache_ttl: 1h
@@ -233,7 +238,7 @@ config:
   #    protocol: oauth
   #    config_data:
   #      client_id: "Iv1.test"
-  #      client_secret_env: "CONNECTOR_GITHUB_SECRET"
+  #      client_secret_ref: "CONNECTOR_GITHUB_SECRET"
   #      authorize_url: "https://github.com/login/oauth/authorize"
   #      token_url: "https://github.com/login/oauth/access_token"
 

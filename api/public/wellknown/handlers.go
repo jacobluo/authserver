@@ -5,30 +5,31 @@ package wellknown
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
-	"github.com/authplane/authserver/internal/config"
+	"github.com/authplane/authserver/internal/domain"
+	"github.com/authplane/authserver/internal/observability"
+	"github.com/authplane/authserver/internal/ports/input"
 )
 
 // handler holds dependencies for discovery endpoints.
 type handler struct {
-	jwks                 JWKSProvider
-	serverCfg            config.ServerConfig
-	resourceServers      ResourceListerFunc
-	hasIntrospection     bool
-	hasClientCredentials bool
-	hasTokenExchange     bool
-	hasDPoP              bool
-	hasAgentIdentity     bool
-	hasCIMD              bool
-	hasJWTBearer         bool
+	jwks       JWKSProvider
+	asMetadata input.ASMetadataPort
+	prMetadata input.PRMetadataPort
+	obs        *observability.Provider
 }
 
 // handleJWKS serves GET /.well-known/jwks.json (RFC 7517).
 func (h *handler) handleJWKS(w http.ResponseWriter, r *http.Request) {
 	data, err := h.jwks.BuildJWKSDocument(r.Context())
 	if err != nil {
+		h.obs.Logger.ErrorContext(r.Context(),
+			"build JWKS document failed",
+			"error", err,
+		)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -37,75 +38,92 @@ func (h *handler) handleJWKS(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(data)
 }
 
-// handleASMetadata serves GET /.well-known/oauth-authorization-server (RFC 8414).
+// handleASMetadata serves GET /.well-known/oauth-authorization-server (RFC 8414)
+// and its alias GET /.well-known/openid-configuration. It is a thin transport
+// adapter: the ASMetadataPort resolves and assembles every capability per
+// request; this handler only maps the application struct onto the RFC 8414 wire
+// DTO and encodes it.
 func (h *handler) handleASMetadata(w http.ResponseWriter, r *http.Request) {
-	issuer := h.serverCfg.Issuer
-
-	grantTypes := []string{"authorization_code", "refresh_token"}
-	if h.hasClientCredentials {
-		grantTypes = append(grantTypes, "client_credentials")
-	}
-	if h.hasTokenExchange {
-		grantTypes = append(grantTypes, "urn:ietf:params:oauth:grant-type:token-exchange")
-	}
-	if h.hasJWTBearer {
-		grantTypes = append(grantTypes, "urn:ietf:params:oauth:grant-type:jwt-bearer")
+	md, err := h.asMetadata.Metadata(r.Context())
+	if err != nil {
+		h.obs.Logger.ErrorContext(r.Context(),
+			"build AS metadata document failed",
+			"error", err,
+		)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
 	}
 
-	metadata := asMetadata{
-		Issuer:                            issuer,
-		AuthorizationEndpoint:             issuer + "/oauth/authorize",
-		TokenEndpoint:                     issuer + "/oauth/token",
-		RegistrationEndpoint:              issuer + "/oauth/register",
-		RevocationEndpoint:                issuer + "/oauth/revoke",
-		JWKSURI:                           issuer + "/.well-known/jwks.json",
-		ResponseTypesSupported:            []string{"code"},
-		GrantTypesSupported:               grantTypes,
-		TokenEndpointAuthMethodsSupported: []string{"none", "client_secret_basic", "client_secret_post"},
-		RevocationEndpointAuthMethods:     []string{"none", "client_secret_basic", "client_secret_post"},
-		CodeChallengeMethodsSupported:     []string{"S256"},
-		ScopesSupported:                   h.collectScopes(),
-		ResourceIndicatorsSupported:       true,
-		ClientIDMetadataDocumentSupported: h.hasCIMD,
-	}
+	doc := asMetadata{
+		Issuer:                            md.Issuer,
+		AuthorizationEndpoint:             md.AuthorizationEndpoint,
+		TokenEndpoint:                     md.TokenEndpoint,
+		RegistrationEndpoint:              md.RegistrationEndpoint,
+		RevocationEndpoint:                md.RevocationEndpoint,
+		IntrospectionEndpoint:             md.IntrospectionEndpoint,
+		JWKSURI:                           md.JWKSURI,
+		ResponseTypesSupported:            md.ResponseTypesSupported,
+		GrantTypesSupported:               md.GrantTypesSupported,
+		TokenEndpointAuthMethodsSupported: md.TokenEndpointAuthMethodsSupported,
+		IntrospectionEndpointAuthMethods:  md.IntrospectionEndpointAuthMethods,
+		RevocationEndpointAuthMethods:     md.RevocationEndpointAuthMethods,
+		CodeChallengeMethodsSupported:     md.CodeChallengeMethodsSupported,
+		ScopesSupported:                   md.ScopesSupported,
+		ResourceIndicatorsSupported:       md.ResourceIndicatorsSupported,
+		ClientIDMetadataDocumentSupported: md.ClientIDMetadataDocumentSupported,
 
-	if h.hasIntrospection {
-		metadata.IntrospectionEndpoint = issuer + "/oauth/introspect"
-		metadata.IntrospectionEndpointAuthMethods = []string{"client_secret_basic", "client_secret_post"}
-	}
+		AuthorizationResponseIssParameterSupported: md.AuthorizationResponseIssParameterSupported,
 
-	if h.hasDPoP {
-		metadata.DPoPSigningAlgValuesSupported = []string{"ES256", "RS256", "PS256"}
-	}
+		DPoPSigningAlgValuesSupported: md.DPoPSigningAlgValuesSupported,
+		AgentIdentitySupported:        md.AgentIdentitySupported,
 
-	if h.hasAgentIdentity {
-		metadata.AgentIdentitySupported = true
-	}
-
-	if h.hasJWTBearer {
-		metadata.IdentityAssertionSupported = true
+		AuthorizationGrantProfilesSupported: md.AuthorizationGrantProfilesSupported,
+		IdentityAssertionSupported:          md.IdentityAssertionSupported,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "public, max-age=3600")
-	_ = json.NewEncoder(w).Encode(metadata)
+	_ = json.NewEncoder(w).Encode(doc)
 }
 
-func (h *handler) collectScopes() []string {
-	if h.resourceServers == nil {
-		return nil
-	}
-	seen := make(map[string]bool)
-	var scopes []string
-	for _, rs := range h.resourceServers() {
-		for _, s := range rs.Scopes {
-			if !seen[s] {
-				seen[s] = true
-				scopes = append(scopes, s)
-			}
+// handlePRMetadata serves GET /.well-known/oauth-protected-resource and its
+// path-suffixed form (RFC 9728 §3.1). It is a thin transport adapter: the
+// PRMetadataPort resolves which Resource is being asked about and assembles the
+// document; this handler maps it onto the wire DTO and encodes it.
+func (h *handler) handlePRMetadata(w http.ResponseWriter, r *http.Request) {
+	// PathValue is empty for the bare well-known route, which the service reads
+	// as "the Resource identified by this origin".
+	ref := r.PathValue("ref")
+
+	md, err := h.prMetadata.Metadata(r.Context(), ref)
+	if err != nil {
+		// A reference naming no registered Resource is a 404, not a 500: the
+		// endpoint answers for Resources this AS knows about, and "no such
+		// resource" is a legitimate answer to a client probing an identifier.
+		if errors.Is(err, domain.ErrResourceNotFound) {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
 		}
+		h.obs.Logger.ErrorContext(r.Context(),
+			"build protected resource metadata failed",
+			"ref", ref,
+			"error", err,
+		)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
 	}
-	return scopes
+
+	doc := protectedResourceMetadata{
+		Resource:               md.Resource,
+		AuthorizationServers:   md.AuthorizationServers,
+		ScopesSupported:        md.ScopesSupported,
+		BearerMethodsSupported: md.BearerMethodsSupported,
+		ResourceName:           md.ResourceName,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+	_ = json.NewEncoder(w).Encode(doc)
 }
 
 // --- Health handler ---
@@ -136,6 +154,30 @@ func (h *healthHandler) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(resp)
+}
+
+// handleLive answers one question: is this process serving HTTP?
+//
+// It checks nothing else, and that is the point. A liveness probe decides
+// whether to KILL the process, so making it depend on an external service turns
+// that service's outage into a restart — which cannot fix the dependency, and
+// here cannot even succeed: serve.go runs database migrations at startup, so a
+// container restarted while the database is down exits again and degrades into
+// CrashLoopBackOff, whose exponential backoff outlives the outage that caused
+// it. Readiness has already removed the pod from the Service by then, so the
+// restart buys no recovery at all.
+//
+// /health and /ready both ping the database on purpose — they answer different
+// questions, for operators and for the Service router respectively. This one is
+// for the kubelet's restart decision and must stay dependency-free. Adding a
+// check here would reintroduce the failure mode it exists to prevent.
+func (h *healthHandler) handleLive(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(healthResponse{
+		Status: "alive",
+		Time:   time.Now().UTC().Format(time.RFC3339),
+	})
 }
 
 func (h *healthHandler) handleReady(w http.ResponseWriter, r *http.Request) {
