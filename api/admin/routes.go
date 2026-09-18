@@ -56,6 +56,19 @@ type AuditRecorder interface {
 	Record(ctx context.Context, e audit.Event)
 }
 
+func registerAdminLoginRoutes(mux *http.ServeMux, auth AuthWrapper, opts OptionalDeps) {
+	if opts.AdminLogin == nil || opts.Auth != nil {
+		return
+	}
+	h := &adminLoginHandler{login: opts.AdminLogin, lockout: opts.AdminLoginLockout, secure: opts.AdminCookieSecure}
+	if opts.System != nil {
+		h.audit = opts.System.Audit
+	}
+	mux.HandleFunc("POST /admin/auth/login", h.handleLogin)
+	mux.Handle("GET /admin/auth/me", auth.Wrap(http.HandlerFunc(h.handleMe)))
+	mux.Handle("POST /admin/auth/logout", auth.Wrap(http.HandlerFunc(h.handleLogout)))
+}
+
 // registerRoutes wires all admin API route handlers on the mux. It returns an
 // error when a downstream-supplied extra route is malformed (nil handler or a
 // pattern outside /admin/), so the composition root decides how to fail rather
