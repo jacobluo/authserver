@@ -1,0 +1,12 @@
+{
+  "title": "签发记录", "subtitle": "Authplane 已签发或代理的所有令牌记录。组合用户、客户端、资源和 JTI 条件以缩小结果范围。",
+  "directoryLoadFailed": "加载目录失败", "searchFailed": "搜索失败", "filterRequired": "请至少选择一个筛选条件（用户、客户端、资源或 JTI）", "revokedToast": "签发记录已撤销", "revokeFailed": "撤销失败",
+  "user": "用户", "client": "客户端", "resource": "资源", "any": "— 任意 —", "jtiPlaceholder": "粘贴 JTI…",
+  "last24h": "最近 24 小时", "last7d": "最近 7 天", "last30d": "最近 30 天", "sinceIgnored": "按 JTI 查询时忽略时间范围", "clear": "清除", "searching": "搜索中…", "search": "搜索", "searchWithFilters": "搜索（{{count}} 个条件）",
+  "resultCount": "{{count}} 条签发记录", "resultCount_one": "{{count}} 条签发记录", "resultCount_other": "{{count}} 条签发记录", "since": "自 {{date}} 起", "noJtiMatch": "没有与该 JTI 对应的签发记录。", "noMatches": "没有符合当前筛选条件的签发记录。",
+  "backend": "后端", "scopes": "权限范围", "issued": "签发时间", "status": "状态", "revoke": "撤销", "detailTitle": "签发记录详情", "brokerNoJti": "（Broker — 无 JTI）",
+  "filterByUser": "按此用户筛选签发记录", "filterByClient": "按此客户端筛选签发记录", "filterByResource": "按此资源筛选签发记录",
+  "revocable": "可撤销", "yes": "是", "no": "否", "issuedAt": "签发时间", "expiresAt": "到期时间", "revokedAt": "撤销时间", "agentChain": "智能体链", "rawRecord": "原始记录",
+  "revokeIssuance": "撤销签发记录", "revokeTitle": "撤销签发记录？", "revokeDescriptionBefore": "撤销此签发记录（jti=", "revokeDescriptionAfter": "）？Mint 令牌将在下次自省时失效；Broker 令牌在到期前仍可在上游使用。", "cancel": "取消", "revoking": "撤销中…",
+  "backendValue": { "mint": "Mint", "broker": "Broker" }, "statusValue": { "active": "有效", "revoked": "已撤销", "expired": "已过期" }
+}

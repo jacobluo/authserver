@@ -66,6 +66,7 @@ func (h *loginHandler) handleGetLogin(w http.ResponseWriter, r *http.Request) {
 	redirect := r.URL.Query().Get("redirect")
 
 	data := loginPageData{
+		Locale:         shared.PageLocaleForRequest(w, r),
 		Redirect:       redirect,
 		ShowLocalLogin: disp.ShowLocalLogin,
 	}
@@ -91,7 +92,7 @@ func (h *loginHandler) handleGetLogin(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
-		data.OIDCStartURL = oidcStart
+		data.OIDCStartURL = data.Locale.Link(oidcStart)
 	}
 
 	data.FormAction = shared.ResolvePath(r.Context(), h.urls, "/login", h.obs.Logger)
@@ -328,6 +329,7 @@ func (h *loginHandler) renderLoginErrorWithRetryAfter(w http.ResponseWriter, r *
 	redirect := r.FormValue("redirect")
 
 	data := loginPageData{
+		Locale:         shared.PageLocaleForRequest(w, r),
 		Error:          errMsg,
 		Redirect:       redirect,
 		ShowLocalLogin: disp.ShowLocalLogin,
@@ -350,7 +352,7 @@ func (h *loginHandler) renderLoginErrorWithRetryAfter(w http.ResponseWriter, r *
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
-		data.OIDCStartURL = oidcStart
+		data.OIDCStartURL = data.Locale.Link(oidcStart)
 	}
 
 	data.FormAction = shared.ResolvePath(r.Context(), h.urls, "/login", h.obs.Logger)
@@ -511,11 +513,11 @@ func (h *loginHandler) csrfForRequest(w http.ResponseWriter, r *http.Request) (s
 }
 
 var loginTmpl = template.Must(template.New("login").Parse(`<!DOCTYPE html>
-<html lang="en">
+<html lang="{{.Locale.Code}}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Sign In — Authplane</title>
+<title>{{.Locale.Text "Sign In"}} — Authplane</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
@@ -562,10 +564,13 @@ text-transform:uppercase;letter-spacing:0.05em;font-weight:500}
 .divider::before{margin-right:16px}
 .divider::after{margin-left:16px}
 .footer{text-align:center;margin-top:24px;font-size:0.8em;color:#94a3b8}
+.language{text-align:right;margin-bottom:12px;font-size:0.82em}
+.language a{color:#4f46e5;text-decoration:none}
 </style>
 </head>
 <body>
 <div class="wrapper">
+<div class="language"><a href="{{.Locale.SwitchURL}}">{{.Locale.SwitchLabel}}</a></div>
 <div class="logo">
 <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
 <rect width="40" height="40" rx="10" fill="#4f46e5"/>
@@ -574,26 +579,27 @@ text-transform:uppercase;letter-spacing:0.05em;font-weight:500}
 <div class="logo-text">Authplane</div>
 </div>
 <div class="card">
-<h1>Welcome back</h1>
-<p class="subtitle">Sign in to your account to continue</p>
-{{if .Error}}<div class="error">{{.Error}}</div>{{end}}
-{{if .OIDCDisplayName}}<a class="oidc-btn" href="{{.OIDCStartURL}}">Continue with {{.OIDCDisplayName}}</a>
-{{if .ShowLocalLogin}}<div class="divider">or</div>{{end}}{{end}}
+<h1>{{.Locale.Text "Welcome back"}}</h1>
+<p class="subtitle">{{.Locale.Text "Sign in to your account to continue"}}</p>
+{{if .Error}}<div class="error">{{.Locale.Text .Error}}</div>{{end}}
+{{if .OIDCDisplayName}}<a class="oidc-btn" href="{{.OIDCStartURL}}">{{if eq .Locale.Code "en"}}Continue with {{.OIDCDisplayName}}{{else}}使用 {{.OIDCDisplayName}} 继续{{end}}</a>
+{{if .ShowLocalLogin}}<div class="divider">{{.Locale.Text "or"}}</div>{{end}}{{end}}
 {{if .ShowLocalLogin}}<form method="POST" action="{{.FormAction}}">
 <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
 <input type="hidden" name="redirect" value="{{.Redirect}}">
+<input type="hidden" name="lang" value="{{.Locale.Code}}">
 <div class="field">
-<label for="email">Email address</label>
+<label for="email">{{.Locale.Text "Email address"}}</label>
 <input type="email" id="email" name="email" placeholder="you@example.com" required autofocus>
 </div>
 <div class="field">
-<label for="password">Password</label>
-<input type="password" id="password" name="password" placeholder="Enter your password" required>
+<label for="password">{{.Locale.Text "Password"}}</label>
+<input type="password" id="password" name="password" placeholder="{{.Locale.Text "Enter your password"}}" required>
 </div>
-<button type="submit" class="btn-primary">Sign in</button>
+<button type="submit" class="btn-primary">{{.Locale.Text "Sign in"}}</button>
 </form>{{end}}
 </div>
-<div class="footer">Secured by Authplane</div>
+<div class="footer">{{.Locale.Text "Secured by Authplane"}}</div>
 </div>
 </body>
 </html>`))

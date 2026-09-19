@@ -1,0 +1,14 @@
+{
+  "title": "Providers", "subtitle": "Upstream configuration for Broker resources — OAuth client IDs, API base URLs, secret env-var bindings.",
+  "loadFailed": "Failed to load providers", "configRequired": "Config is required", "invalidJson": "Invalid JSON", "slugRequired": "Slug is required", "nameRequired": "Display name is required", "jsonParseError": "JSON parse error: {{error}}",
+  "created": "Provider \"{{slug}}\" created", "createFailed": "Failed to create provider", "noChanges": "No changes to save", "updated": "Provider updated", "updateFailed": "Failed to update", "deleted": "Provider deleted", "deleteFailed": "Failed to delete",
+  "searchPlaceholder": "Search by slug, name, or protocol…", "newProvider": "+ New Provider", "slug": "Slug", "displayName": "Display Name", "protocol": "Protocol", "updatedColumn": "Updated", "createdColumn": "Created",
+  "empty": "No providers configured. Create one to support Broker resources.", "noMatches": "No providers match your search.", "newProviderTitle": "New Provider", "editProviderTitle": "Edit Provider",
+  "slugRequiredLabel": "Slug *", "slugExample": "e.g. github", "displayNameRequiredLabel": "Display Name *", "nameExample": "e.g. GitHub", "protocolRequiredLabel": "Protocol *", "configDataRequiredLabel": "Config Data *",
+  "configDescription": "Adapter-shaped JSON. The shape varies by protocol; see the sample for a working starting point.", "seeSample": "See sample for {{protocol}}", "metadata": "Metadata",
+  "secretsBefore": "Secrets are NOT stored in", "secretsMiddle": ". Reference an environment variable (e.g.", "secretsAfter": ") and set the value at the deployment level.",
+  "cancel": "Cancel", "create": "Create", "saveChanges": "Save Changes", "delete": "Delete", "close": "Close", "useSample": "Use this sample",
+  "sampleTitle": "Sample config_data — {{protocol}}", "sampleDescription": "Copy this into the Config Data field, then adjust for your provider. The shape is what the server-side adapter expects; the UI does not validate beyond JSON well-formedness.",
+  "deleteTitle": "Delete {{slug}}?", "deleteBefore": "Removing", "deleteAfter": "will fail with 409 if any Resource still references it. Reassign or delete those resources first if so.", "typeToConfirmBefore": "Type", "typeToConfirmAfter": "to confirm:",
+  "protocolValue": { "oauth": "OAuth", "api_key": "API key", "service_account": "Service account" }
+}

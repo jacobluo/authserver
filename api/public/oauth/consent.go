@@ -37,6 +37,7 @@ func (h *consentHandler) handleGetConsent(w http.ResponseWriter, r *http.Request
 
 	_, ok := shared.UserIDFromContext(r.Context())
 	if !ok {
+		shared.PageLocaleForRequest(w, r)
 		shared.RedirectInternal(w, r, h.urls, "/login?redirect="+url.QueryEscape(r.URL.String()), http.StatusSeeOther, h.obs.Logger)
 		return
 	}
@@ -70,6 +71,7 @@ func (h *consentHandler) handleGetConsent(w http.ResponseWriter, r *http.Request
 	}
 
 	shared.RenderTemplate(r.Context(), w, http.StatusOK, consentTmpl, consentPageData{
+		Locale:              shared.PageLocaleForRequest(w, r),
 		FormAction:          shared.ResolvePath(r.Context(), h.urls, "/consent", h.obs.Logger),
 		SessionID:           view.SessionID,
 		ClientName:          view.ClientName,
@@ -186,11 +188,11 @@ func (h *consentHandler) handlePostConsent(w http.ResponseWriter, r *http.Reques
 // each scope item shows its human-readable description as the primary
 // label with the scope name as a secondary monospace identifier.
 var consentTmpl = template.Must(template.New("consent").Parse(`<!DOCTYPE html>
-<html lang="en">
+<html lang="{{.Locale.Code}}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Authorize — Authplane</title>
+<title>{{.Locale.Text "Authorize"}} — Authplane</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
@@ -253,10 +255,13 @@ letter-spacing:0.05em;color:#64748b;margin-bottom:6px}
 font-weight:700;color:#0f172a;overflow-wrap:anywhere}
 .destination.local{background:#fffbeb;border-color:#fcd34d}
 .destination .warn{margin-top:8px;font-size:0.85em;color:#92400e;line-height:1.5}
+.language{text-align:right;margin-bottom:12px;font-size:0.82em}
+.language a{color:#4f46e5;text-decoration:none}
 </style>
 </head>
 <body>
 <div class="wrapper">
+<div class="language"><a href="{{.Locale.SwitchURL}}">{{.Locale.SwitchLabel}}</a></div>
 <div class="logo">
 <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
 <rect width="40" height="40" rx="10" fill="#4f46e5"/>
@@ -267,17 +272,18 @@ font-weight:700;color:#0f172a;overflow-wrap:anywhere}
 <div class="card">
 <div class="header">
 {{if .ResourceDisplayName}}
-<h1><span class="client">{{.ClientName}}</span> wants permission to access <span class="target">{{.ResourceDisplayName}}</span></h1>
+<h1><span class="client">{{.ClientName}}</span> {{.Locale.Text "wants permission to access"}} <span class="target">{{.ResourceDisplayName}}</span></h1>
 {{else}}
-<h1>Authorize access</h1>
-<p class="info"><span class="client">{{.ClientName}}</span> wants to access your account</p>
+<h1>{{.Locale.Text "Authorize access"}}</h1>
+<p class="info"><span class="client">{{.ClientName}}</span> {{.Locale.Text "wants to access your account"}}</p>
 {{end}}
 {{if .ResourceSlug}}<div class="resource"><span class="slug">{{.ResourceSlug}}</span><span class="sep">·</span><span>{{.Resource}}</span></div>{{else if .Resource}}<div class="resource">{{.Resource}}</div>{{end}}
 </div>
 <form method="POST" action="{{.FormAction}}">
 <input type="hidden" name="session_id" value="{{.SessionID}}">
 <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-<div class="section-label">Permissions requested</div>
+<input type="hidden" name="lang" value="{{.Locale.Code}}">
+<div class="section-label">{{.Locale.Text "Permissions requested"}}</div>
 <ul class="scopes">
 {{range .Scopes}}
 <li>
@@ -290,26 +296,24 @@ font-weight:700;color:#0f172a;overflow-wrap:anywhere}
 {{end}}
 </ul>
 <label class="remember">
-<input type="checkbox" name="remember"> Remember this decision
+<input type="checkbox" name="remember"> {{.Locale.Text "Remember this decision"}}
 </label>
 {{if .RedirectHost}}
 <div class="destination{{if .RedirectIsLoopback}} local{{end}}">
-<div class="dest-label">Approving will send your authorization to</div>
+<div class="dest-label">{{.Locale.Text "Approving will send your authorization to"}}</div>
 <div class="host">{{.RedirectHost}}</div>
 {{if .RedirectIsLoopback}}
-<div class="warn">This address is your own computer. Any program running on it can
-ask for this — including one you did not intend to authorize. Continue only if you
-started this yourself, just now.</div>
+<div class="warn">{{.Locale.Text "This address is your own computer. Any program running on it can ask for this — including one you did not intend to authorize. Continue only if you started this yourself, just now."}}</div>
 {{end}}
 </div>
 {{end}}
 <div class="buttons">
-<button type="submit" name="action" value="deny" class="btn-deny">Deny</button>
-<button type="submit" name="action" value="allow" class="btn-allow">Allow access</button>
+<button type="submit" name="action" value="deny" class="btn-deny">{{.Locale.Text "Deny"}}</button>
+<button type="submit" name="action" value="allow" class="btn-allow">{{.Locale.Text "Allow access"}}</button>
 </div>
 </form>
 </div>
-<div class="footer">Secured by Authplane</div>
+<div class="footer">{{.Locale.Text "Secured by Authplane"}}</div>
 </div>
 </body>
 </html>`))

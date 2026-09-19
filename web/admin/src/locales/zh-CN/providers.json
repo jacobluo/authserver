@@ -1,0 +1,14 @@
+{
+  "title": "提供方", "subtitle": "Broker 资源的上游配置 — OAuth 客户端 ID、API 基础 URL 和密钥环境变量绑定。",
+  "loadFailed": "加载提供方失败", "configRequired": "配置为必填项", "invalidJson": "JSON 无效", "slugRequired": "标识为必填项", "nameRequired": "显示名称为必填项", "jsonParseError": "JSON 解析错误：{{error}}",
+  "created": "提供方“{{slug}}”已创建", "createFailed": "创建提供方失败", "noChanges": "没有需要保存的更改", "updated": "提供方已更新", "updateFailed": "更新失败", "deleted": "提供方已删除", "deleteFailed": "删除失败",
+  "searchPlaceholder": "按标识、名称或协议搜索…", "newProvider": "+ 新建提供方", "slug": "标识", "displayName": "显示名称", "protocol": "协议", "updatedColumn": "更新时间", "createdColumn": "创建时间",
+  "empty": "尚未配置提供方。创建一个提供方以支持 Broker 资源。", "noMatches": "没有与搜索条件匹配的提供方。", "newProviderTitle": "新建提供方", "editProviderTitle": "编辑提供方",
+  "slugRequiredLabel": "标识 *", "slugExample": "例如 github", "displayNameRequiredLabel": "显示名称 *", "nameExample": "例如 GitHub", "protocolRequiredLabel": "协议 *", "configDataRequiredLabel": "配置数据 *",
+  "configDescription": "适配器格式的 JSON。结构因协议而异；可参考示例作为起点。", "seeSample": "查看 {{protocol}} 示例", "metadata": "元数据",
+  "secretsBefore": "密钥不会存储在", "secretsMiddle": "中。请引用环境变量（例如", "secretsAfter": "），并在部署环境中设置其值。",
+  "cancel": "取消", "create": "创建", "saveChanges": "保存更改", "delete": "删除", "close": "关闭", "useSample": "使用此示例",
+  "sampleTitle": "config_data 示例 — {{protocol}}", "sampleDescription": "将此内容复制到配置数据字段，再按提供方需要调整。其结构由服务端适配器定义；界面只验证 JSON 格式。",
+  "deleteTitle": "删除 {{slug}}？", "deleteBefore": "删除", "deleteAfter": "时，如果仍有资源引用它，将返回 409。请先重新分配或删除这些资源。", "typeToConfirmBefore": "输入", "typeToConfirmAfter": "以确认：",
+  "protocolValue": { "oauth": "OAuth", "api_key": "API 密钥", "service_account": "服务账号" }
+}

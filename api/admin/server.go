@@ -11,8 +11,10 @@ import (
 
 	"golang.org/x/time/rate"
 
+	"github.com/authplane/authserver/api/shared"
 	"github.com/authplane/authserver/internal/config"
 	"github.com/authplane/authserver/internal/observability"
+	"github.com/authplane/authserver/internal/ports/input"
 )
 
 // Server is the admin API HTTP server.
@@ -24,17 +26,20 @@ type Server struct {
 // OptionalDeps groups optional admin server dependencies.
 // All fields are nil-safe — omit any that are not configured.
 type OptionalDeps struct {
-	System          *SystemDeps
-	Keys            *KeysDeps
-	DCR             *DCRDeps
-	XAA             *XAADeps
-	Resources       *ResourceAdminDeps
-	BrokerProviders *BrokerProviderAdminDeps
-	Grants          *GrantAdminDeps
-	Issuances       *IssuanceAdminDeps
-	Fronting        *FrontingAdminDeps
-	Auth            AuthWrapper  // optional external auth strategy; when set, replaces the API-key gate. Must be non-nil if set (a typed-nil defeats the presence check and panics at construction).
-	ExtraRoutes     []ExtraRoute // optional downstream-supplied admin routes, registered behind the same auth gate and middleware chain as built-in routes; nil in the default binary
+	AdminLogin        input.AdminLoginPort
+	AdminLoginLockout *shared.AuthLockout
+	AdminCookieSecure bool
+	System            *SystemDeps
+	Keys              *KeysDeps
+	DCR               *DCRDeps
+	XAA               *XAADeps
+	Resources         *ResourceAdminDeps
+	BrokerProviders   *BrokerProviderAdminDeps
+	Grants            *GrantAdminDeps
+	Issuances         *IssuanceAdminDeps
+	Fronting          *FrontingAdminDeps
+	Auth              AuthWrapper  // optional external auth strategy; replaces the local gate and disables local account routes. Must be non-nil if set (a typed-nil defeats the presence check and panics at construction).
+	ExtraRoutes       []ExtraRoute // optional downstream-supplied admin routes, registered behind the same auth gate and middleware chain as built-in routes; nil in the default binary
 }
 
 // NewServer creates the admin HTTP server with routes wired.
@@ -78,21 +83,22 @@ func NewServer(ctx context.Context, cfg config.AdminConfig, admin Provider, obs 
 	}
 
 	// Auth middleware + route registration.
-	// Auth strategy: use the injected AuthWrapper when one is supplied
-	// (external authentication); otherwise the API-key gate built from
-	// cfg.APIKey. A server fronted by external auth that injects no wrapper and
-	// sets no api_key falls back to an empty-key gate that rejects all →
-	// fail-closed.
+	// An injected strategy has priority. Otherwise the API-key gate is
+	// supplemented by account sessions when the local login port is wired.
+	// With neither a key nor a login port, the default gate rejects all.
 	authMW := opts.Auth
 	if authMW == nil {
 		authMW = newAPIKeyMiddleware(cfg.APIKey)
+		if opts.AdminLogin != nil {
+			authMW = &accountMiddleware{apiKey: authMW, login: opts.AdminLogin}
+		}
 	}
+	registerAdminLoginRoutes(mux, authMW, opts)
 	if err := registerRoutes(mux, authMW, admin, obs, opts.System, opts.Keys, opts.DCR, opts.XAA, opts.Resources, opts.BrokerProviders, opts.Grants, opts.Issuances, opts.Fronting, opts.ExtraRoutes); err != nil {
 		return nil, err
 	}
 
-	// UI routes — no auth middleware. The SPA manages its own auth
-	// via the /admin/auth/verify endpoint.
+	// UI assets are public; data routes enforce their own resolved auth gate.
 	registerUIRoutes(mux)
 
 	return s, nil

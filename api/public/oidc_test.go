@@ -375,7 +375,7 @@ func TestLoginPage_ShowsOIDCButton(t *testing.T) {
 	mock := &mockOIDCFlowProvider{authURL: "https://idp.example.com/authorize"}
 	env := newOIDCTestServer(t, mock)
 
-	resp, err := http.Get(env.ts.URL + "/login?redirect=/oauth/authorize")
+	resp, err := http.Get(env.ts.URL + "/login?redirect=/oauth/authorize&lang=en")
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -460,7 +460,7 @@ func TestLoginPage_HidesPasswordForm_WhenShowLocalLoginFalse(t *testing.T) {
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
 
-	resp, err := http.Get(ts.URL + "/login")
+	resp, err := http.Get(ts.URL + "/login?lang=en")
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}

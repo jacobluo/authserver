@@ -11,6 +11,7 @@ import { C, fonts, sz, alpha } from "../tokens";
 import type { ScopeMap } from "../api";
 import Btn from "./Btn";
 import Tag from "./Tag";
+import { useTranslation } from "../i18n";
 
 interface ScopeMapEditorProps {
   sourceScopes: string[];
@@ -27,6 +28,7 @@ export default function ScopeMapEditor({
   onChange,
   disabled,
 }: ScopeMapEditorProps) {
+  const { t } = useTranslation("fronting");
   const keys = Object.keys(value).sort();
   const usedKeys = new Set(keys);
   const availableKeys = sourceScopes.filter((s) => !usedKeys.has(s));
@@ -80,7 +82,7 @@ export default function ScopeMapEditor({
           fontStyle: "italic",
         }}
       >
-        Select source and target to map scopes.
+        {t("mapSelectResources")}
       </div>
     );
   }
@@ -100,9 +102,9 @@ export default function ScopeMapEditor({
           letterSpacing: 1,
         }}
       >
-        <div>Source scope</div>
+        <div>{t("sourceScope")}</div>
         <div></div>
-        <div>Target scopes</div>
+        <div>{t("targetScopes")}</div>
         <div></div>
       </div>
       {keys.length === 0 && (
@@ -117,7 +119,7 @@ export default function ScopeMapEditor({
             fontStyle: "italic",
           }}
         >
-          No scope mappings yet. Click "+ Add row" to start.
+          {t("noMappings")}
         </div>
       )}
 
@@ -165,7 +167,7 @@ export default function ScopeMapEditor({
                 ))}
               </select>
               {keyIsStale && (
-                <Tag color={C.warn}>stale (not in source.scopes)</Tag>
+                <Tag color={C.warn}>{t("staleSource")}</Tag>
               )}
             </div>
 
@@ -203,8 +205,8 @@ export default function ScopeMapEditor({
                       }}
                       title={
                         valStale
-                          ? "stale: not in target.scopes — click to remove"
-                          : "click to remove"
+                          ? t("staleTargetTitle")
+                          : t("removeTargetTitle")
                       }
                     >
                       {v}
@@ -222,7 +224,7 @@ export default function ScopeMapEditor({
                       fontStyle: "italic",
                     }}
                   >
-                    select at least one target scope
+                    {t("selectTarget")}
                   </span>
                 )}
               </div>
@@ -244,7 +246,7 @@ export default function ScopeMapEditor({
                     width: "100%",
                   }}
                 >
-                  <option value="">+ Add target scope…</option>
+                  <option value="">{t("addTarget")}</option>
                   {remainingTargets.map((t) => (
                     <option key={t} value={t}>
                       {t}
@@ -269,8 +271,8 @@ export default function ScopeMapEditor({
           onClick={addRow}
           disabled={disabled || availableKeys.length === 0}
         >
-          + Add row
-          {availableKeys.length === 0 && " (every source scope mapped)"}
+          {t("addRow")}
+          {availableKeys.length === 0 && t("everySourceMapped")}
         </Btn>
       </div>
     </div>

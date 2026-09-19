@@ -2,8 +2,11 @@ package oauth
 
 import (
 	"bytes"
+	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/authplane/authserver/api/shared"
 )
 
 // render is the consent template applied to page data, as the handler renders
@@ -11,6 +14,9 @@ import (
 // what the user sees, not what the struct holds.
 func renderConsent(t *testing.T, data consentPageData) string {
 	t.Helper()
+	// These pre-existing security assertions use the original English copy;
+	// request English explicitly so they continue testing the warning itself.
+	data.Locale = shared.PageLocaleForRequest(nil, httptest.NewRequest("GET", "/consent?lang=en", nil))
 	var buf bytes.Buffer
 	if err := consentTmpl.Execute(&buf, data); err != nil {
 		t.Fatalf("render consent: %v", err)

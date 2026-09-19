@@ -20,6 +20,7 @@ import Modal from "../../components/Modal";
 import Toast from "../../components/Toast";
 import SectionTitle from "../../components/SectionTitle";
 import { GrantsTables, consentRevokeCopy, brokerRevokeCopy } from "../Grants";
+import { useTranslation } from "../../i18n";
 
 interface RevokeTarget {
   kind: "consent" | "broker";
@@ -32,6 +33,8 @@ interface Props {
 }
 
 export default function UserGrantsSection({ user }: Props) {
+  const { t } = useTranslation("users");
+  const { t: tGrants } = useTranslation("grants");
   const [clients, setClients] = useState<ClientView[]>([]);
   const [resources, setResources] = useState<ResourceView[]>([]);
   const [providers, setProviders] = useState<BrokerProviderView[]>([]);
@@ -61,11 +64,11 @@ export default function UserGrantsSection({ user }: Props) {
       setProviders(ps);
       setError("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load grants");
+      setError(err instanceof Error ? err.message : t("loadGrantsFailed"));
     } finally {
       setLoading(false);
     }
-  }, [user.id]);
+  }, [user.id, t]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -74,15 +77,15 @@ export default function UserGrantsSection({ user }: Props) {
     try {
       if (revokeTarget.kind === "consent") {
         await revokeConsentGrant(revokeTarget.id);
-        showToast("Consent grant revoked");
+        showToast(t("consentRevoked"));
       } else {
         await revokeBrokerGrant(revokeTarget.id);
-        showToast("Broker grant revoked");
+        showToast(t("brokerRevoked"));
       }
       setRevokeTarget(null);
       load();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to revoke", "error");
+      showToast(err instanceof Error ? err.message : t("revokeFailed"), "error");
     }
   };
 
@@ -90,23 +93,23 @@ export default function UserGrantsSection({ user }: Props) {
     setRevokeTarget({
       kind: "consent",
       id: g.id,
-      description: consentRevokeCopy(g, clients, resources),
+      description: consentRevokeCopy(g, clients, resources, tGrants),
     });
   };
   const handleRevokeBroker = (g: BrokerGrantView) => {
     setRevokeTarget({
       kind: "broker",
       id: g.id,
-      description: brokerRevokeCopy(g, providers, user),
+      description: brokerRevokeCopy(g, providers, user, tGrants),
     });
   };
 
   return (
     <div style={{ marginTop: 24 }}>
-      <SectionTitle>Grants</SectionTitle>
+      <SectionTitle>{t("grants")}</SectionTitle>
 
       {loading && (
-        <div style={{ fontSize: sz.base, color: C.textDim, padding: "8px 0" }}>Loading…</div>
+        <div style={{ fontSize: sz.base, color: C.textDim, padding: "8px 0" }}>{t("loading")}</div>
       )}
 
       {error && (
@@ -126,7 +129,7 @@ export default function UserGrantsSection({ user }: Props) {
 
       {revokeTarget && (
         <Modal
-          title={`Revoke ${revokeTarget.kind} grant?`}
+          title={t("revokeGrantTitle", { kind: t(revokeTarget.kind) })}
           titleColor={C.danger}
           onClose={() => setRevokeTarget(null)}
         >
@@ -134,8 +137,8 @@ export default function UserGrantsSection({ user }: Props) {
             {revokeTarget.description}
           </div>
           <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-            <Btn secondary small onClick={() => setRevokeTarget(null)}>Cancel</Btn>
-            <Btn danger small onClick={performRevoke}>Revoke</Btn>
+            <Btn secondary small onClick={() => setRevokeTarget(null)}>{t("cancel")}</Btn>
+            <Btn danger small onClick={performRevoke}>{t("revoke")}</Btn>
           </div>
         </Modal>
       )}

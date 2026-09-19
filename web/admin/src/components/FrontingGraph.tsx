@@ -23,6 +23,7 @@
 import { useMemo, useState } from "react";
 import { C, fonts, sz, alpha } from "../tokens";
 import type { FrontingLinkView, ResourceView } from "../api";
+import { useTranslation } from "../i18n";
 
 interface FrontingGraphProps {
   links: FrontingLinkView[];
@@ -56,6 +57,7 @@ export default function FrontingGraph({
   onNodeClick,
   onEdgeClick,
 }: FrontingGraphProps) {
+  const { t } = useTranslation("fronting");
   const [hovered, setHovered] = useState<
     { kind: "node"; slug: string } | { kind: "edge"; key: string } | null
   >(null);
@@ -75,8 +77,7 @@ export default function FrontingGraph({
           fontSize: sz.base,
         }}
       >
-        No fronting links yet. Switch to the List tab and click + New
-        Fronting Link to create one.
+        {t("graphEmpty")}
       </div>
     );
   }
@@ -97,8 +98,7 @@ export default function FrontingGraph({
             color: C.warn,
           }}
         >
-          Graph view is best for small topologies — switch to the List tab
-          for full data.
+          {t("graphScaleWarning")}
         </div>
       )}
       <div
@@ -123,8 +123,8 @@ export default function FrontingGraph({
             // text readable when the edge crosses other graph elements;
             // hover bumps to accent color so the operator can confirm
             // which edge they're about to click.
-            const label = edgeLabel(e.link, e.drifted);
-            const labelW = Math.max(36, label.length * 7 + 12);
+            const label = edgeLabel(e.link, e.drifted, t("drifted"));
+            const labelW = Math.max(36, [...label].length * 11 + 12);
             return (
               <g key={e.key}>
                 <path
@@ -229,7 +229,7 @@ export default function FrontingGraph({
                     fontSize={10}
                     fill={C.danger}
                   >
-                    missing
+                    {t("missing")}
                   </text>
                 )}
                 {n.orphanTarget && (
@@ -239,7 +239,7 @@ export default function FrontingGraph({
                     r={4}
                     fill={C.danger}
                   >
-                    <title>orphan target scope(s)</title>
+                    <title>{t("orphanTargetTitle")}</title>
                   </circle>
                 )}
                 {n.unusedSource && (
@@ -249,7 +249,7 @@ export default function FrontingGraph({
                     r={4}
                     fill={C.warn}
                   >
-                    <title>unused source scope(s)</title>
+                    <title>{t("unusedSourceTitle")}</title>
                   </circle>
                 )}
               </g>
@@ -279,7 +279,7 @@ export default function FrontingGraph({
               marginRight: 4,
             }}
           />
-          orphan target scope
+          {t("orphanTarget")}
         </span>
         <span>
           <span
@@ -292,7 +292,7 @@ export default function FrontingGraph({
               marginRight: 4,
             }}
           />
-          unused source scope
+          {t("unusedSource")}
         </span>
         <span>
           <span
@@ -305,7 +305,7 @@ export default function FrontingGraph({
               verticalAlign: "middle",
             }}
           />
-          drifted (scope-map references unknown scope)
+          {t("driftedHelp")}
         </span>
       </div>
     </div>
@@ -465,11 +465,11 @@ function hasOrphanTargetScope(
   return false;
 }
 
-function edgeLabel(l: FrontingLinkView, drifted: boolean): string {
+function edgeLabel(l: FrontingLinkView, drifted: boolean, driftedLabel: string): string {
   const k = Object.keys(l.scope_map).length;
   const v = new Set(Object.values(l.scope_map).flat()).size;
   const base = `${k}→${v}`;
-  return drifted ? `${base} (drifted)` : base;
+  return drifted ? `${base} (${driftedLabel})` : base;
 }
 
 function truncate(s: string, n: number): string {

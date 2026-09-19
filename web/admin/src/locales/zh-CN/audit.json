@@ -1,0 +1,20 @@
+{
+  "title": "审计日志",
+  "loadFailed": "加载审计事件失败",
+  "eventCount": "{{total}} 条事件",
+  "autoRefresh": "每 30 秒自动刷新",
+  "paused": "已暂停",
+  "live": "● 实时",
+  "pausedButton": "○ 已暂停",
+  "refresh": "刷新",
+  "actionPlaceholder": "按操作筛选…",
+  "actorPlaceholder": "按操作者 ID 筛选…",
+  "timestamp": "时间戳",
+  "event": "事件",
+  "actor": "操作者",
+  "detail": "详情",
+  "actorId": "操作者 ID",
+  "actorType": "操作者类型",
+  "clientId": "客户端 ID",
+  "noEvents": "未找到审计事件。"
+}

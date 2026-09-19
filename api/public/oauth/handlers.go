@@ -114,6 +114,7 @@ func (h *oauthHandler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 
 	// Login required: redirect to login page, preserving the full authorize URL.
 	if result.LoginRequired {
+		shared.PageLocaleForRequest(w, r)
 		loginURL := fmt.Sprintf("/login?redirect=%s", url.QueryEscape(r.URL.String()))
 		shared.RedirectInternal(w, r, h.urls, loginURL, http.StatusSeeOther, h.obs.Logger)
 		return
@@ -121,6 +122,7 @@ func (h *oauthHandler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 
 	// Consent required: redirect to consent page.
 	if result.ConsentRequired {
+		shared.PageLocaleForRequest(w, r)
 		consentURL := fmt.Sprintf("/consent?session_id=%s", url.QueryEscape(result.Session.ID))
 		shared.RedirectInternal(w, r, h.urls, consentURL, http.StatusSeeOther, h.obs.Logger)
 		return

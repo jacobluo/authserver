@@ -300,6 +300,54 @@ func TestAuthorizeEndpoint_NoUser_RedirectsToLogin(t *testing.T) {
 	}
 }
 
+func TestAuthorizeEnglishChoiceSurvivesLoginRedirect(t *testing.T) {
+	env := newOAuthTestServer(t)
+	c, _ := env.createClient(t, true)
+	q := url.Values{
+		"client_id": {c.ID}, "redirect_uri": {"https://app.example.com/callback"},
+		"response_type": {"code"}, "scope": {"tools/query"}, "state": {"s1"},
+		"resource": {"https://mcp.example.com"}, "lang": {"en"},
+		"code_challenge":        {crypto.ComputeS256Challenge(crypto.GenerateVerifier())},
+		"code_challenge_method": {"S256"},
+	}
+	hc := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	resp, err := hc.Get(env.ts.URL + "/oauth/authorize?" + q.Encode())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("authorize status = %d", resp.StatusCode)
+	}
+	var preference *http.Cookie
+	for _, cookie := range resp.Cookies() {
+		if cookie.Name == "authplane_lang" {
+			preference = cookie
+		}
+	}
+	if preference == nil || preference.Value != "en" {
+		t.Fatalf("language preference not carried on login redirect: %#v", preference)
+	}
+	loginURL, err := url.Parse(resp.Header.Get("Location"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	loginReq, err := http.NewRequest(http.MethodGet, env.ts.URL+loginURL.RequestURI(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	loginReq.AddCookie(preference)
+	loginResp, err := hc.Do(loginReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer loginResp.Body.Close()
+	loginBody, _ := io.ReadAll(loginResp.Body)
+	if !strings.Contains(string(loginBody), `<html lang="en">`) || !strings.Contains(string(loginBody), "Welcome back") {
+		t.Fatalf("login page lost English choice: %s", loginBody)
+	}
+}
+
 func TestAuthorizeEndpoint_MissingPKCE_RedirectsWithError(t *testing.T) {
 	env := newOAuthTestServer(t)
 	c, _ := env.createClient(t, true)
@@ -2410,7 +2458,7 @@ func TestConsent_GET_RendersPerMCPTemplate(t *testing.T) {
 		Jar:           &testCookieJar{cookies: cookies},
 		CheckRedirect: func(r *http.Request, via []*http.Request) error { return http.ErrUseLastResponse },
 	}
-	resp, err := hc.Get(env.ts.URL + "/consent?session_id=" + url.QueryEscape(sid))
+	resp, err := hc.Get(env.ts.URL + "/consent?session_id=" + url.QueryEscape(sid) + "&lang=en")
 	if err != nil {
 		t.Fatalf("GET /consent: %v", err)
 	}
@@ -2557,6 +2605,7 @@ func TestConsent_GET_BrokerResource_RendersErrorPage(t *testing.T) {
 		"scope":                 {"read"},
 		"state":                 {"broker-state"},
 		"resource":              {"https://broker-mcp.example.com"},
+		"lang":                  {"en"},
 		"code_challenge":        {challenge},
 		"code_challenge_method": {"S256"},
 	}

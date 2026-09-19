@@ -51,6 +51,7 @@ type Stores struct {
 	RuntimeSettings     *RuntimeSettingsStore
 	IDP                 *IDPStore
 	AssertionJTI        *AssertionJTIStore
+	AdminSession        *AdminSessionStore
 	XAAPolicy           *XAAPolicyStore
 	SubjectMapping      *SubjectMappingStore
 	Resource            *ResourceStore
@@ -206,6 +207,7 @@ func (d *DB) NewStores() *Stores {
 		RuntimeSettings:     &RuntimeSettingsStore{db: d.DB, logger: d.logger, tracer: d.tracer, metrics: d.metrics},
 		IDP:                 &IDPStore{db: d.DB, logger: d.logger, tracer: d.tracer, metrics: d.metrics},
 		AssertionJTI:        &AssertionJTIStore{db: d.DB, logger: d.logger, tracer: d.tracer, metrics: d.metrics},
+		AdminSession:        &AdminSessionStore{db: d.DB, logger: d.logger, tracer: d.tracer, metrics: d.metrics},
 		XAAPolicy:           &XAAPolicyStore{db: d.DB, logger: d.logger, tracer: d.tracer, metrics: d.metrics},
 		SubjectMapping:      &SubjectMappingStore{db: d.DB, logger: d.logger, tracer: d.tracer, metrics: d.metrics},
 		Resource:            &ResourceStore{db: d.DB, logger: d.logger, tracer: d.tracer, metrics: d.metrics},
@@ -263,6 +265,9 @@ func (d *DB) IDP() output.IDPStore { return d.stores.IDP }
 
 // AssertionJTI returns the assertion JTI store.
 func (d *DB) AssertionJTI() output.AssertionJTIStore { return d.stores.AssertionJTI }
+
+// AdminSession returns the revocable admin session store.
+func (d *DB) AdminSession() output.AdminSessionStore { return d.stores.AdminSession }
 
 // XAAPolicy returns the XAA policy store.
 func (d *DB) XAAPolicy() output.XAAPolicyStore { return d.stores.XAAPolicy }

@@ -8,6 +8,7 @@ import Tag from "../../components/Tag";
 import Mono from "../../components/Mono";
 import AgentChain from "../../components/AgentChain";
 import DelegationDepth from "../../components/DelegationDepth";
+import { useTranslation } from "../../i18n";
 
 interface DecodedJWT {
   header: Record<string, unknown>;
@@ -19,7 +20,7 @@ function decodeJWT(token: string): DecodedJWT {
   try {
     const parts = token.trim().split(".");
     if (parts.length !== 3) {
-      return { header: {}, payload: {}, error: "Invalid JWT format — expected 3 dot-separated parts" };
+      return { header: {}, payload: {}, error: "invalidJwtFormat" };
     }
 
     const decodeBase64Url = (s: string): string => {
@@ -32,7 +33,7 @@ function decodeJWT(token: string): DecodedJWT {
     const payload = JSON.parse(decodeBase64Url(parts[1]));
     return { header, payload };
   } catch {
-    return { header: {}, payload: {}, error: "Failed to decode JWT — invalid base64 or JSON" };
+    return { header: {}, payload: {}, error: "decodeFailed" };
   }
 }
 
@@ -46,18 +47,19 @@ function isExpired(exp: unknown): boolean {
   return exp * 1000 < Date.now();
 }
 
-function timeRemaining(exp: unknown): string {
+function timeRemaining(exp: unknown, t: ReturnType<typeof useTranslation>["t"]): string {
   if (typeof exp !== "number") return "—";
   const diff = exp * 1000 - Date.now();
-  if (diff <= 0) return "expired";
+  if (diff <= 0) return t("expired");
   const mins = Math.floor(diff / 60000);
-  if (mins < 60) return `${mins}m remaining`;
+  if (mins < 60) return t("minutesRemaining", { count: mins });
   const hrs = Math.floor(mins / 60);
   const remMins = mins % 60;
-  return `${hrs}h ${remMins}m remaining`;
+  return t("hoursMinutesRemaining", { hours: hrs, minutes: remMins });
 }
 
 export default function InspectorTab() {
+  const { t } = useTranslation("tokens");
   const [token, setToken] = useState("");
   const [result, setResult] = useState<DecodedJWT | null>(null);
 
@@ -78,11 +80,11 @@ export default function InspectorTab() {
   return (
     <div style={{ maxWidth: 720 }}>
       <div style={{ fontSize: sz.base, color: C.textDim, marginBottom: 18 }}>
-        Decode any JWT to inspect its claims — decoded locally, never sent to the server
+        {t("inspectorDescription")}
       </div>
 
       <Card style={{ marginBottom: 14 }}>
-        <SectionTitle>Paste Token</SectionTitle>
+        <SectionTitle>{t("pasteToken")}</SectionTitle>
         <TextInput
           rows={4}
           placeholder="eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9…"
@@ -90,25 +92,25 @@ export default function InspectorTab() {
           onChange={setToken}
         />
         <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-          <Btn onClick={handleDecode} disabled={!token.trim()}>Decode</Btn>
-          {token && <Btn secondary small onClick={handleClear}>Clear</Btn>}
+          <Btn onClick={handleDecode} disabled={!token.trim()}>{t("decode")}</Btn>
+          {token && <Btn secondary small onClick={handleClear}>{t("clear")}</Btn>}
         </div>
       </Card>
 
       {result && (
         <Card>
           {result.error ? (
-            <div style={{ fontFamily: fonts.mono, fontSize: sz.base, color: C.danger }}>{result.error}</div>
+            <div style={{ fontFamily: fonts.mono, fontSize: sz.base, color: C.danger }}>{t(result.error)}</div>
           ) : (
             <>
               {/* Status tags */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 8 }}>
-                <SectionTitle>Decoded Claims</SectionTitle>
+                <SectionTitle>{t("decodedClaims")}</SectionTitle>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  <Tag color={expired ? C.danger : C.success}>{expired ? "● expired" : "● valid"}</Tag>
-                  {!!p.cnf && <Tag color={C.purple}>dpop-bound</Tag>}
-                  {!!p.agent_id && <Tag color={C.purple}>agent</Tag>}
-                  {!!p.act && <Tag color={C.blue}>delegated</Tag>}
+                  <Tag color={expired ? C.danger : C.success}>{expired ? t("expiredTag") : t("validTag")}</Tag>
+                  {!!p.cnf && <Tag color={C.purple}>{t("dpopBound")}</Tag>}
+                  {!!p.agent_id && <Tag color={C.purple}>{t("agent")}</Tag>}
+                  {!!p.act && <Tag color={C.blue}>{t("delegated")}</Tag>}
                 </div>
               </div>
 
@@ -117,7 +119,7 @@ export default function InspectorTab() {
                 <div style={{ marginBottom: 14 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", fontFamily: fonts.mono, fontSize: sz.sm, color: C.textDim, marginBottom: 6 }}>
                     <span>{formatTimestamp(p.iat)}</span>
-                    <span style={{ color: expired ? C.danger : C.success }}>{timeRemaining(p.exp)}</span>
+                    <span style={{ color: expired ? C.danger : C.success }}>{timeRemaining(p.exp, t)}</span>
                     <span>{formatTimestamp(p.exp)}</span>
                   </div>
                   <div style={{ height: 4, background: C.surface2, borderRadius: 2, overflow: "hidden" }}>
@@ -134,7 +136,7 @@ export default function InspectorTab() {
               {/* Header */}
               <div style={{ marginBottom: 16 }}>
                 <div style={{ fontSize: sz.xs, fontFamily: fonts.mono, color: C.textDim, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>
-                  Header
+                  {t("header")}
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0 }}>
                   {Object.entries(h).map(([k, v]) => (
@@ -189,7 +191,7 @@ export default function InspectorTab() {
                 <>
                   <div style={{ paddingTop: 8, paddingBottom: 4 }}>
                     <span style={{ fontSize: sz.xs, fontFamily: fonts.mono, textTransform: "uppercase", letterSpacing: 1.2, color: C.blue }}>
-                      Token Exchange
+                      {t("tokenExchange")}
                     </span>
                   </div>
                   {([
@@ -215,13 +217,13 @@ export default function InspectorTab() {
                 <>
                   <div style={{ paddingTop: 8, paddingBottom: 4 }}>
                     <span style={{ fontSize: sz.xs, fontFamily: fonts.mono, textTransform: "uppercase", letterSpacing: 1.2, color: C.purple }}>
-                      Agent Identity
+                      {t("agentIdentity")}
                     </span>
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "100px 1fr", gap: 8, padding: "7px 0", borderBottom: `1px solid ${C.border}` }}>
                     <span style={{ fontFamily: fonts.mono, fontSize: sz.xs, color: C.purple, textTransform: "uppercase", letterSpacing: 0.8 }}>agent_id</span>
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <Tag color={C.purple}>agent</Tag>
+                      <Tag color={C.purple}>{t("agent")}</Tag>
                       <Mono style={{ fontSize: sz.sm }}>{String(p.agent_id)}</Mono>
                     </div>
                   </div>
@@ -242,7 +244,7 @@ export default function InspectorTab() {
                 return (
                   <div style={{ marginTop: 12 }}>
                     <div style={{ fontSize: sz.xs, fontFamily: fonts.mono, color: C.textDim, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>
-                      Other Claims
+                      {t("otherClaims")}
                     </div>
                     {extra.map(([k, v]) => (
                       <div key={k} style={{ display: "grid", gridTemplateColumns: "100px 1fr", gap: 8, padding: "6px 0", borderBottom: `1px solid ${C.border}` }}>

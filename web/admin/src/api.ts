@@ -1,20 +1,38 @@
 // API client for the Authplane Admin UI.
-// Manages API key auth and provides typed functions for all admin endpoints.
-
-const API_KEY_STORAGE = "authplane_admin_api_key";
+// Credentials are deliberately retained only for this page lifetime.
 
 // ─── API Key Management ──────────────────────────────────────────────────────
 
+let apiKey: string | null = null;
+let csrfToken: string | null = null;
+const authFailureListeners = new Set<() => void>();
+
 export function getApiKey(): string | null {
-  return sessionStorage.getItem(API_KEY_STORAGE);
+  return apiKey;
 }
 
 export function setApiKey(key: string): void {
-  sessionStorage.setItem(API_KEY_STORAGE, key);
+  apiKey = key;
+  csrfToken = null;
 }
 
 export function clearApiKey(): void {
-  sessionStorage.removeItem(API_KEY_STORAGE);
+  apiKey = null;
+}
+
+function clearAuthentication(): void {
+  apiKey = null;
+  csrfToken = null;
+}
+
+export function onAuthenticationFailure(listener: () => void): () => void {
+  authFailureListeners.add(listener);
+  return () => authFailureListeners.delete(listener);
+}
+
+function notifyAuthenticationFailure(): void {
+  clearAuthentication();
+  for (const listener of authFailureListeners) listener();
 }
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -112,21 +130,21 @@ export function isApiError(err: unknown): err is ApiError {
 }
 
 async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const key = getApiKey();
-  if (!key) {
-    throw new AuthError();
-  }
-
   const headers = new Headers(options.headers);
-  headers.set("Authorization", `Bearer ${key}`);
+  const unsafe = !["GET", "HEAD", "OPTIONS"].includes((options.method ?? "GET").toUpperCase());
+  if (apiKey) {
+    headers.set("Authorization", `Bearer ${apiKey}`);
+  } else if (unsafe && csrfToken) {
+    headers.set("X-Admin-CSRF", csrfToken);
+  }
   if (!headers.has("Content-Type") && options.body) {
     headers.set("Content-Type", "application/json");
   }
 
-  const res = await fetch(path, { ...options, headers });
+  const res = await fetch(path, { ...options, headers, credentials: "same-origin" });
 
   if (res.status === 401) {
-    clearApiKey();
+    notifyAuthenticationFailure();
     throw new AuthError();
   }
 
@@ -147,8 +165,45 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
+export interface AdminAccount {
+  id: string;
+  email: string;
+  name: string;
+  csrf_token: string;
+  expires_at: string;
+}
+
+export async function loginWithPassword(email: string, password: string): Promise<AdminAccount> {
+  const account = await apiFetch<AdminAccount>("/admin/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+  csrfToken = account.csrf_token;
+  return account;
+}
+
+export async function getCurrentAccount(): Promise<AdminAccount | null> {
+  try {
+    const account = await apiFetch<AdminAccount>("/admin/auth/me");
+    csrfToken = account.csrf_token;
+    return account;
+  } catch (err) {
+    if (err instanceof AuthError) return null;
+    throw err;
+  }
+}
+
 export async function verifyAuth(): Promise<{ valid: boolean; version: string }> {
   return apiFetch("/admin/auth/verify", { method: "POST" });
+}
+
+export async function logout(): Promise<void> {
+  if (!apiKey) {
+    await apiFetch("/admin/auth/logout", { method: "POST" });
+    clearAuthentication();
+    return;
+  }
+  clearAuthentication();
 }
 
 // ─── Clients ─────────────────────────────────────────────────────────────────

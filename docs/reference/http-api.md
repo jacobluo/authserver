@@ -5,9 +5,9 @@
 The Authplane authserver exposes two HTTP servers:
 
 - **Public** (default `:9000`) — OAuth 2.1 endpoints, MCP discovery, RFC-compliant well-known docs, the consent + login UI, and the connect/disconnect surface for broker-vended upstreams.
-- **Admin** (default `:9001`) — provisioning + day-2 operations, protected by `Authorization: Bearer <AUTHPLANE_ADMIN_API_KEY>`. The `/metrics` endpoint lives on the admin server and is gated by Prometheus basic auth (see [Configuration](./configuration.md)).
+- **Admin** (default `:9001`) — provisioning + day-2 operations, business routes accept `Authorization: Bearer <AUTHPLANE_ADMIN_API_KEY>` or an admin account Cookie. Account login is unauthenticated; account me/logout require the admin Cookie. Cookie writes require `X-Admin-CSRF`. An explicit Authorization header takes priority and never falls back to Cookie authentication. These describe the local server; an injected authentication wrapper defines its own policy and disables local account routes. The `/metrics` endpoint lives on the admin server and is gated by Prometheus basic auth (see [Configuration](./configuration.md)).
 
-All endpoints are documented from their route registration site in `api/public/**` and `api/admin/**`; DTOs come from the Go struct tags in `api/admin/dto.go`, `internal/admin/dto/dto.go`, `api/public/**/dto.go`, and `api/shared/errors.go`. Sample shells live in `examples/` and the [CLI reference](./cli.md) covers the matching `authserver admin …` subcommands that round-trip the same wire shapes.
+All endpoints are documented from their route registration site in `api/public/**` and `api/admin/**`; DTOs come from the Go struct tags in `api/admin/dto.go`, `api/admin/admin_login.go`, `internal/admin/dto/dto.go`, `api/public/**/dto.go`, and `api/shared/errors.go`. Sample shells live in `examples/` and the [CLI reference](./cli.md) covers the matching `authserver admin …` subcommands that round-trip the same wire shapes.
 
 ## Index
 
@@ -19,6 +19,9 @@ All endpoints are documented from their route registration site in `api/public/*
 | `GET` | `/.well-known/oauth-protected-resource/{ref...}` | public | [#http-public-well-known-oauth-protected-resource-ref](#http-public-well-known-oauth-protected-resource-ref) |
 | `GET` | `/.well-known/openid-configuration` | public | [#http-public-well-known-openid-configuration](#http-public-well-known-openid-configuration) |
 | `GET` | `/admin/audit` | admin | [#http-admin-audit-list](#http-admin-audit-list) |
+| `POST` | `/admin/auth/login` | admin | [#http-admin-auth-login-create](#http-admin-auth-login-create) |
+| `POST` | `/admin/auth/logout` | admin | [#http-admin-auth-logout-create](#http-admin-auth-logout-create) |
+| `GET` | `/admin/auth/me` | admin | [#http-admin-auth-me-list](#http-admin-auth-me-list) |
 | `POST` | `/admin/auth/verify` | admin | [#http-admin-auth-verify](#http-admin-auth-verify) |
 | `GET` | `/admin/broker-providers` | admin | [#http-admin-broker-providers-list](#http-admin-broker-providers-list) |
 | `POST` | `/admin/broker-providers` | admin | [#http-admin-broker-providers-create](#http-admin-broker-providers-create) |
@@ -401,10 +404,52 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-audit-list"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:94`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`  
+**Source** — `api/admin/routes.go:107`
 
 **Response 200** — JSON array of [`auditEventView`](#dto-audit-event-view).
+
+---
+
+### `POST /admin/auth/login`
+
+<a id="http-admin-auth-login-create"></a>
+
+**Server** — admin (:9001)  
+**Auth** — none (public; request-body parameters identify the caller)  
+**Source** — `api/admin/routes.go:67`
+
+**Response 200** — [`adminAccountResponse`](#dto-admin-account-response).
+
+**Note** — requires JSON `email` and `password`, and an `Origin` matching the admin host and configured scheme. Only existing active local admins may sign in. Sets an HttpOnly, SameSite=Strict Cookie scoped to `/admin`, with an absolute eight-hour expiry; Secure follows `session.secure`. Ordinary OAuth sessions do not grant admin access.
+
+---
+
+### `POST /admin/auth/logout`
+
+<a id="http-admin-auth-logout-create"></a>
+
+**Server** — admin (:9001)  
+**Auth** — admin account Cookie `authplane_admin_session`; Cookie authentication also requires `X-Admin-CSRF` from login/me  
+**Source** — `api/admin/routes.go:69`
+
+**Response 204** — empty body.
+
+**Note** — revokes the stored session and clears the Cookie. Requires the admin Cookie and `X-Admin-CSRF`; an API key alone cannot log out an account.
+
+---
+
+### `GET /admin/auth/me`
+
+<a id="http-admin-auth-me-list"></a>
+
+**Server** — admin (:9001)  
+**Auth** — admin account Cookie `authplane_admin_session`  
+**Source** — `api/admin/routes.go:68`
+
+**Response 200** — [`adminAccountResponse`](#dto-admin-account-response).
+
+**Note** — returns the current admin identity and CSRF token. An API key alone cannot access this account endpoint.
 
 ---
 
@@ -413,8 +458,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-auth-verify"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:102`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`; Cookie authentication also requires `X-Admin-CSRF` from login/me  
+**Source** — `api/admin/routes.go:115`
 
 **Response 200** — [`authVerifyResponse`](#dto-auth-verify-response).
 
@@ -425,8 +470,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-broker-providers-list"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:224`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`  
+**Source** — `api/admin/routes.go:237`
 
 **Response 200** — JSON array of [`BrokerProviderView`](#dto-broker-provider-view).
 
@@ -437,8 +482,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-broker-providers-create"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:225`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`; Cookie authentication also requires `X-Admin-CSRF` from login/me  
+**Source** — `api/admin/routes.go:238`
 
 **Request** — JSON [`createBrokerProviderRequest`](#dto-create-broker-provider-request). **Response 201** — [`BrokerProviderView`](#dto-broker-provider-view).
 
@@ -449,8 +494,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-broker-providers-id-delete"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:228`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`; Cookie authentication also requires `X-Admin-CSRF` from login/me  
+**Source** — `api/admin/routes.go:241`
 
 **Response 204** — no body.
 
@@ -461,8 +506,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-broker-providers-id-get"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:226`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`  
+**Source** — `api/admin/routes.go:239`
 
 **Response 200** — [`BrokerProviderView`](#dto-broker-provider-view).
 
@@ -473,8 +518,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-broker-providers-id-update"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:227`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`; Cookie authentication also requires `X-Admin-CSRF` from login/me  
+**Source** — `api/admin/routes.go:240`
 
 **Request** — JSON [`patchBrokerProviderRequest`](#dto-patch-broker-provider-request). **Response 200** — [`BrokerProviderView`](#dto-broker-provider-view).
 
@@ -485,8 +530,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-clients-list"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:69`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`  
+**Source** — `api/admin/routes.go:82`
 
 **Response 200** — JSON array of [`clientView`](#dto-client-view).
 
@@ -497,8 +542,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-clients-create"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:68`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`; Cookie authentication also requires `X-Admin-CSRF` from login/me  
+**Source** — `api/admin/routes.go:81`
 
 **Request** — JSON [`createClientRequest`](#dto-create-client-request).
 
@@ -513,8 +558,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-clients-id-delete"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:73`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`; Cookie authentication also requires `X-Admin-CSRF` from login/me  
+**Source** — `api/admin/routes.go:86`
 
 **Response 204** — no body.
 
@@ -525,8 +570,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-clients-id-get"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:70`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`  
+**Source** — `api/admin/routes.go:83`
 
 **Response 200** — JSON [`clientView`](#dto-client-view). 404 `client_not_found`.
 
@@ -537,8 +582,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-clients-id-update"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:71`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`; Cookie authentication also requires `X-Admin-CSRF` from login/me  
+**Source** — `api/admin/routes.go:84`
 
 **Request** — JSON [`updateClientRequest`](#dto-update-client-request) (pointer fields → partial update). **Response 200** — [`clientView`](#dto-client-view).
 
@@ -549,8 +594,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-clients-id-reactivate"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:76`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`; Cookie authentication also requires `X-Admin-CSRF` from login/me  
+**Source** — `api/admin/routes.go:89`
 
 **Response 200** — JSON [`statusResponse`](#dto-status-response).
 
@@ -561,8 +606,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-clients-id-revoke"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:75`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`; Cookie authentication also requires `X-Admin-CSRF` from login/me  
+**Source** — `api/admin/routes.go:88`
 
 **Response 200** — JSON [`statusResponse`](#dto-status-response).
 
@@ -573,8 +618,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-clients-id-rotate-secret"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:72`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`; Cookie authentication also requires `X-Admin-CSRF` from login/me  
+**Source** — `api/admin/routes.go:85`
 
 **Response 200** — JSON [`rotateSecretResponse`](#dto-rotate-secret-response); secret shown once.
 
@@ -585,8 +630,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-clients-id-suspend"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:74`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`; Cookie authentication also requires `X-Admin-CSRF` from login/me  
+**Source** — `api/admin/routes.go:87`
 
 **Response 200** — JSON [`statusResponse`](#dto-status-response).
 
@@ -597,8 +642,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-fronting-list"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:262`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`  
+**Source** — `api/admin/routes.go:275`
 
 **Response 200** — JSON array of [`FrontingLinkView`](#dto-fronting-link-view).
 
@@ -609,8 +654,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-fronting-create"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:263`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`; Cookie authentication also requires `X-Admin-CSRF` from login/me  
+**Source** — `api/admin/routes.go:276`
 
 **Request** — JSON [`createFrontingLinkRequest`](#dto-create-fronting-link-request); `?dry_run=true` validates without persisting. **Response 201** — [`FrontingLinkView`](#dto-fronting-link-view).
 
@@ -621,8 +666,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-fronting-source-target-delete"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:266`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`; Cookie authentication also requires `X-Admin-CSRF` from login/me  
+**Source** — `api/admin/routes.go:279`
 
 **Response 204** — no body.
 
@@ -633,8 +678,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-fronting-source-target-get"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:264`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`  
+**Source** — `api/admin/routes.go:277`
 
 **Response 200** — [`FrontingLinkView`](#dto-fronting-link-view).
 
@@ -645,8 +690,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-fronting-source-target-update"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:265`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`; Cookie authentication also requires `X-Admin-CSRF` from login/me  
+**Source** — `api/admin/routes.go:278`
 
 **Request** — JSON [`patchFrontingLinkRequest`](#dto-patch-fronting-link-request). **Response 200** — [`FrontingLinkView`](#dto-fronting-link-view).
 
@@ -657,8 +702,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-grants-broker-id-delete"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:239`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`; Cookie authentication also requires `X-Admin-CSRF` from login/me  
+**Source** — `api/admin/routes.go:252`
 
 **Response 204** — no body.
 
@@ -669,8 +714,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-grants-consent-id-delete"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:238`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`; Cookie authentication also requires `X-Admin-CSRF` from login/me  
+**Source** — `api/admin/routes.go:251`
 
 **Response 204** — no body.
 
@@ -681,8 +726,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-idps-list"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:145`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`  
+**Source** — `api/admin/routes.go:158`
 
 ---
 
@@ -691,8 +736,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-idps-create"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:144`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`; Cookie authentication also requires `X-Admin-CSRF` from login/me  
+**Source** — `api/admin/routes.go:157`
 
 ---
 
@@ -701,8 +746,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-idps-id-delete"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:148`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`; Cookie authentication also requires `X-Admin-CSRF` from login/me  
+**Source** — `api/admin/routes.go:161`
 
 ---
 
@@ -711,8 +756,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-idps-id-get"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:146`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`  
+**Source** — `api/admin/routes.go:159`
 
 ---
 
@@ -721,8 +766,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-idps-id-update"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:147`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`; Cookie authentication also requires `X-Admin-CSRF` from login/me  
+**Source** — `api/admin/routes.go:160`
 
 ---
 
@@ -731,8 +776,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-idps-id-refresh-keys"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:149`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`; Cookie authentication also requires `X-Admin-CSRF` from login/me  
+**Source** — `api/admin/routes.go:162`
 
 ---
 
@@ -741,8 +786,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-issuances-list"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:248`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`  
+**Source** — `api/admin/routes.go:261`
 
 **Response 200** — [`IssuanceListResponse`](#dto-issuance-list-response).
 
@@ -753,8 +798,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-issuances-id-delete"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:250`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`; Cookie authentication also requires `X-Admin-CSRF` from login/me  
+**Source** — `api/admin/routes.go:263`
 
 **Response 204** — no body.
 
@@ -765,8 +810,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-issuances-id-get"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:249`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`  
+**Source** — `api/admin/routes.go:262`
 
 **Response 200** — [`IssuanceView`](#dto-issuance-view).
 
@@ -777,8 +822,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-keys-list"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:116`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`  
+**Source** — `api/admin/routes.go:129`
 
 **Response 200** — [`listKeysResponse`](#dto-list-keys-response).
 
@@ -789,8 +834,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-keys-rotate"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:117`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`; Cookie authentication also requires `X-Admin-CSRF` from login/me  
+**Source** — `api/admin/routes.go:130`
 
 **Response 200** — [`rotateKeyResponse`](#dto-rotate-key-response).
 
@@ -801,8 +846,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-resources-list"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:189`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`  
+**Source** — `api/admin/routes.go:202`
 
 **Response 200** — JSON array of [`ResourceView`](#dto-resource-view).
 
@@ -813,8 +858,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-resources-create"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:190`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`; Cookie authentication also requires `X-Admin-CSRF` from login/me  
+**Source** — `api/admin/routes.go:203`
 
 **Request** — JSON [`createResourceRequest`](#dto-create-resource-request). **Response 201** — [`ResourceView`](#dto-resource-view).
 
@@ -825,8 +870,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-resources-id-delete"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:193`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`; Cookie authentication also requires `X-Admin-CSRF` from login/me  
+**Source** — `api/admin/routes.go:206`
 
 **Response 204** — no body. 409 [`frontingLinkConflictResponse`](#dto-fronting-link-conflict-response) if fronting links reference the resource without `?cascade=true`.
 
@@ -837,8 +882,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-resources-id-get"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:191`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`  
+**Source** — `api/admin/routes.go:204`
 
 **Response 200** — [`ResourceView`](#dto-resource-view).
 
@@ -849,8 +894,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-resources-id-update"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:192`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`; Cookie authentication also requires `X-Admin-CSRF` from login/me  
+**Source** — `api/admin/routes.go:205`
 
 **Request** — JSON [`patchResourceRequest`](#dto-patch-resource-request). **Response 200** — [`ResourceView`](#dto-resource-view).
 
@@ -861,8 +906,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-resources-slug-fronting-list"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:267`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`  
+**Source** — `api/admin/routes.go:280`
 
 **Response 200** — [`ResourceFrontingView`](#dto-resource-fronting-view) (split into `fronts` / `fronted_by`).
 
@@ -873,8 +918,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-resources-slug-policy-connect-allowed-return-urls-delete"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:210`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`; Cookie authentication also requires `X-Admin-CSRF` from login/me  
+**Source** — `api/admin/routes.go:223`
 
 ---
 
@@ -883,8 +928,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-resources-slug-policy-connect-allowed-return-urls-list"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:208`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`  
+**Source** — `api/admin/routes.go:221`
 
 ---
 
@@ -893,8 +938,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-resources-slug-policy-connect-allowed-return-urls-create"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:209`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`; Cookie authentication also requires `X-Admin-CSRF` from login/me  
+**Source** — `api/admin/routes.go:222`
 
 ---
 
@@ -903,8 +948,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-resources-slug-policy-exchange-allowed-clients-list"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:205`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`  
+**Source** — `api/admin/routes.go:218`
 
 ---
 
@@ -913,8 +958,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-resources-slug-policy-exchange-allowed-clients-create"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:206`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`; Cookie authentication also requires `X-Admin-CSRF` from login/me  
+**Source** — `api/admin/routes.go:219`
 
 ---
 
@@ -923,8 +968,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-resources-slug-policy-exchange-allowed-clients-client-id-delete"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:207`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`; Cookie authentication also requires `X-Admin-CSRF` from login/me  
+**Source** — `api/admin/routes.go:220`
 
 ---
 
@@ -933,8 +978,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-resources-slug-policy-runtime-client-ids-list"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:213`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`  
+**Source** — `api/admin/routes.go:226`
 
 ---
 
@@ -943,8 +988,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-resources-slug-policy-runtime-client-ids-create"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:214`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`; Cookie authentication also requires `X-Admin-CSRF` from login/me  
+**Source** — `api/admin/routes.go:227`
 
 ---
 
@@ -953,8 +998,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-resources-slug-policy-runtime-client-ids-client-id-delete"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:215`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`; Cookie authentication also requires `X-Admin-CSRF` from login/me  
+**Source** — `api/admin/routes.go:228`
 
 ---
 
@@ -963,8 +1008,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-settings-dcr-list"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:128`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`  
+**Source** — `api/admin/routes.go:141`
 
 **Response 200** — [`dcrSettingsView`](#dto-dcr-settings-view).
 
@@ -975,8 +1020,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-settings-dcr-update"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:129`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`; Cookie authentication also requires `X-Admin-CSRF` from login/me  
+**Source** — `api/admin/routes.go:142`
 
 **Request** — JSON [`updateDCRSettingsRequest`](#dto-update-dcrsettings-request). **Response 200** — [`dcrSettingsView`](#dto-dcr-settings-view).
 
@@ -987,8 +1032,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-stats-list"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:97`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`  
+**Source** — `api/admin/routes.go:110`
 
 **Response 200** — [`statsView`](#dto-stats-view).
 
@@ -999,8 +1044,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-system-config-list"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:106`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`  
+**Source** — `api/admin/routes.go:119`
 
 **Response 200** — [`systemConfigResponse`](#dto-system-config-response).
 
@@ -1011,8 +1056,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-system-status-list"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:105`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`  
+**Source** — `api/admin/routes.go:118`
 
 **Response 200** — [`systemStatusResponse`](#dto-system-status-response).
 
@@ -1023,8 +1068,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-tokens-list"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:79`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`  
+**Source** — `api/admin/routes.go:92`
 
 ---
 
@@ -1033,8 +1078,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-tokens-jti-delete"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:80`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`; Cookie authentication also requires `X-Admin-CSRF` from login/me  
+**Source** — `api/admin/routes.go:93`
 
 ---
 
@@ -1043,7 +1088,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-ui-list"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`  
 **Source** — `api/admin/ui.go:52`
 
 ---
@@ -1053,8 +1098,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-users-list"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:83`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`  
+**Source** — `api/admin/routes.go:96`
 
 **Response 200** — JSON array of [`userView`](#dto-user-view).
 
@@ -1065,8 +1110,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-users-create"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:84`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`; Cookie authentication also requires `X-Admin-CSRF` from login/me  
+**Source** — `api/admin/routes.go:97`
 
 **Request** — JSON [`createUserRequest`](#dto-create-user-request). **Response 201** — [`userView`](#dto-user-view).
 
@@ -1077,8 +1122,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-users-id-delete"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:87`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`; Cookie authentication also requires `X-Admin-CSRF` from login/me  
+**Source** — `api/admin/routes.go:100`
 
 **Response 204** — no body.
 
@@ -1089,8 +1134,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-users-id-get"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:85`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`  
+**Source** — `api/admin/routes.go:98`
 
 **Response 200** — [`userView`](#dto-user-view).
 
@@ -1101,8 +1146,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-users-id-update"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:86`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`; Cookie authentication also requires `X-Admin-CSRF` from login/me  
+**Source** — `api/admin/routes.go:99`
 
 **Request** — JSON [`updateUserRequest`](#dto-update-user-request). **Response 200** — [`userView`](#dto-user-view).
 
@@ -1113,8 +1158,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-users-id-disable"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:90`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`; Cookie authentication also requires `X-Admin-CSRF` from login/me  
+**Source** — `api/admin/routes.go:103`
 
 **Response 200** — JSON [`statusResponse`](#dto-status-response).
 
@@ -1125,8 +1170,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-users-id-enable"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:91`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`; Cookie authentication also requires `X-Admin-CSRF` from login/me  
+**Source** — `api/admin/routes.go:104`
 
 **Response 200** — JSON [`statusResponse`](#dto-status-response).
 
@@ -1137,8 +1182,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-users-id-grants-list"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:237`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`  
+**Source** — `api/admin/routes.go:250`
 
 **Response 200** — [`UserGrantsView`](#dto-user-grants-view). Note: `credential_data` is NEVER serialized on broker grants.
 
@@ -1149,8 +1194,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-users-id-tokens-delete"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:89`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`; Cookie authentication also requires `X-Admin-CSRF` from login/me  
+**Source** — `api/admin/routes.go:102`
 
 **Response 200** — JSON `{ revoked: N }`.
 
@@ -1161,8 +1206,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-users-id-tokens-list"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:88`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`  
+**Source** — `api/admin/routes.go:101`
 
 **Response 200** — `{ tokens: [...] }` (issuance summary; see `api/admin/handlers.go`).
 
@@ -1173,8 +1218,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-xaa-policies-list"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:158`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`  
+**Source** — `api/admin/routes.go:171`
 
 ---
 
@@ -1183,8 +1228,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-xaa-policies-create"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:157`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`; Cookie authentication also requires `X-Admin-CSRF` from login/me  
+**Source** — `api/admin/routes.go:170`
 
 ---
 
@@ -1193,8 +1238,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-xaa-policies-id-delete"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:161`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`; Cookie authentication also requires `X-Admin-CSRF` from login/me  
+**Source** — `api/admin/routes.go:174`
 
 ---
 
@@ -1203,8 +1248,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-xaa-policies-id-get"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:159`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`  
+**Source** — `api/admin/routes.go:172`
 
 ---
 
@@ -1213,8 +1258,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-xaa-policies-id-update"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:160`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`; Cookie authentication also requires `X-Admin-CSRF` from login/me  
+**Source** — `api/admin/routes.go:173`
 
 ---
 
@@ -1223,8 +1268,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-xaa-subject-mappings-list"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:171`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`  
+**Source** — `api/admin/routes.go:184`
 
 ---
 
@@ -1233,8 +1278,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-xaa-subject-mappings-create"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:170`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`; Cookie authentication also requires `X-Admin-CSRF` from login/me  
+**Source** — `api/admin/routes.go:183`
 
 ---
 
@@ -1243,8 +1288,8 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 <a id="http-admin-xaa-subject-mappings-id-delete"></a>
 
 **Server** — admin (:9001)  
-**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY`  
-**Source** — `api/admin/routes.go:172`
+**Auth** — `Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or admin account Cookie `authplane_admin_session`; Cookie authentication also requires `X-Admin-CSRF` from login/me  
+**Source** — `api/admin/routes.go:185`
 
 ---
 
@@ -1254,7 +1299,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — admin (:9001)  
 **Auth** — Prometheus basic-auth (see `metrics.basic_auth_*` config)  
-**Source** — `api/admin/server.go:77`
+**Source** — `api/admin/server.go:82`
 
 **Response 200** — Prometheus text-format metrics. Basic-auth protected.
 
@@ -1506,6 +1551,20 @@ UserGrantsView is the JSON body for GET /admin/users/{id}/grants and for the equ
 | --- | --- | --- | --- |
 | `consent_grants` | `[]ConsentGrantView` → [`ConsentGrantView`](#dto-consent-grant-view) | yes |  |
 | `broker_grants` | `[]BrokerGrantView` → [`BrokerGrantView`](#dto-broker-grant-view) | yes |  |
+
+### `adminAccountResponse`
+
+<a id="dto-admin-account-response"></a>
+
+**Source** — `api/admin/admin_login.go:28`
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `id` | `string` | yes |  |
+| `email` | `string` | yes |  |
+| `name` | `string` | yes |  |
+| `csrf_token` | `string` | yes |  |
+| `expires_at` | `time.Time` | yes |  |
 
 ### `agentsConfigView`
 

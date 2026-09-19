@@ -1,6 +1,7 @@
 import { ReactNode, useState } from "react";
 import { C, fonts, sz } from "../tokens";
 import TextInput from "./TextInput";
+import { useTranslation } from "../i18n";
 
 interface TableProps {
   headers: string[];
@@ -12,6 +13,7 @@ interface TableProps {
 }
 
 export default function Table({ headers, rows, onRowClick, searchable, searchPlaceholder, filterFn }: TableProps) {
+  const { t } = useTranslation("common");
   const [search, setSearch] = useState("");
 
   const filtered = searchable && search && filterFn
@@ -23,7 +25,7 @@ export default function Table({ headers, rows, onRowClick, searchable, searchPla
       {searchable && (
         <div style={{ marginBottom: 12 }}>
           <TextInput
-            placeholder={searchPlaceholder || "Search…"}
+            placeholder={searchPlaceholder || t("search")}
             value={search}
             onChange={setSearch}
             style={{ width: 280 }}

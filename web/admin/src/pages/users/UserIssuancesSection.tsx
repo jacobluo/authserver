@@ -13,6 +13,7 @@ import type {
 import Mono from "../../components/Mono";
 import Tag from "../../components/Tag";
 import SectionTitle from "../../components/SectionTitle";
+import { useTranslation } from "../../i18n";
 
 interface Props {
   user: UserView;
@@ -24,10 +25,10 @@ function truncate(s: string, n = 14): string {
   return s.length > n ? s.substring(0, n) + "…" : s;
 }
 
-function formatDateTime(iso: string | undefined): string {
+function formatDateTime(iso: string | undefined, locale: string): string {
   if (!iso) return "—";
   const d = new Date(iso);
-  return d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleString(locale, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
 function backendColor(k: BackendKind): string {
@@ -47,6 +48,7 @@ function statusColor(s: "active" | "revoked" | "expired"): string {
 }
 
 export default function UserIssuancesSection({ user }: Props) {
+  const { t, i18n } = useTranslation("users");
   const [rows, setRows] = useState<IssuanceView[]>([]);
   const [clients, setClients] = useState<ClientView[]>([]);
   const [resources, setResources] = useState<ResourceView[]>([]);
@@ -67,11 +69,11 @@ export default function UserIssuancesSection({ user }: Props) {
       setResources(rs);
       setError("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load issuances");
+      setError(err instanceof Error ? err.message : t("loadIssuancesFailed"));
     } finally {
       setLoading(false);
     }
-  }, [user.id]);
+  }, [user.id, t]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -87,18 +89,18 @@ export default function UserIssuancesSection({ user }: Props) {
   return (
     <div style={{ marginTop: 24 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-        <SectionTitle>Recent Issuances</SectionTitle>
+        <SectionTitle>{t("recentIssuances")}</SectionTitle>
         <a
           href={`#/issuances?user=${encodeURIComponent(user.id)}`}
           style={{ fontSize: sz.sm, color: C.accent, textDecoration: "none", fontFamily: fonts.mono }}
-          title="Open the full issuances list filtered to this user"
+          title={t("viewAllTitle")}
         >
-          View all →
+          {t("viewAll")}
         </a>
       </div>
 
       {loading && (
-        <div style={{ fontSize: sz.base, color: C.textDim, padding: "8px 0" }}>Loading…</div>
+        <div style={{ fontSize: sz.base, color: C.textDim, padding: "8px 0" }}>{t("loading")}</div>
       )}
 
       {error && (
@@ -107,7 +109,7 @@ export default function UserIssuancesSection({ user }: Props) {
 
       {!loading && !error && rows.length === 0 && (
         <div style={{ fontSize: sz.base, color: C.textDim, padding: "8px 0" }}>
-          No issuances in the last 30 days.
+          {t("noRecentIssuances")}
         </div>
       )}
 
@@ -115,7 +117,7 @@ export default function UserIssuancesSection({ user }: Props) {
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: sz.base }}>
           <thead>
             <tr>
-              {["JTI", "Client", "Resource", "Backend", "Issued", "Status"].map((h) => (
+              {[t("jti"), t("client"), t("resource"), t("backend"), t("issued"), t("status")].map((h) => (
                 <th key={h} style={{ textAlign: "left", padding: "6px 8px", color: C.textDim, fontFamily: fonts.mono, fontSize: sz.xs, textTransform: "uppercase", letterSpacing: 1.2, borderBottom: `1px solid ${C.border}`, fontWeight: 400 }}>
                   {h}
                 </th>
@@ -137,13 +139,13 @@ export default function UserIssuancesSection({ user }: Props) {
                     <Mono style={{ fontSize: sz.sm }}>{resourceLabel(i.resource_id)}</Mono>
                   </td>
                   <td style={{ padding: "6px 8px" }}>
-                    <Tag color={backendColor(i.backend_kind)}>{i.backend_kind}</Tag>
+                    <Tag color={backendColor(i.backend_kind)}>{t(`backendValue.${i.backend_kind}`, { defaultValue: i.backend_kind })}</Tag>
                   </td>
                   <td style={{ padding: "6px 8px", color: C.textDim, fontSize: sz.sm }}>
-                    {formatDateTime(i.issued_at)}
+                    {formatDateTime(i.issued_at, i18n.language)}
                   </td>
                   <td style={{ padding: "6px 8px" }}>
-                    <Tag color={statusColor(s)}>{s}</Tag>
+                    <Tag color={statusColor(s)}>{t(`statusValue.${s}`)}</Tag>
                   </td>
                 </tr>
               );

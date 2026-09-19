@@ -8,6 +8,7 @@ import Mono from "../components/Mono";
 import TextInput from "../components/TextInput";
 import Btn from "../components/Btn";
 import AgentChain from "../components/AgentChain";
+import { useTranslation } from "../i18n";
 
 function eventColor(event: string): string {
   if (event.includes("agent.") || event.includes("token.exchanged")) return C.purple;
@@ -19,10 +20,10 @@ function eventColor(event: string): string {
   return C.textDim;
 }
 
-function formatTime(iso: string): string {
+function formatTime(iso: string, locale: string): string {
   if (!iso) return "\u2014";
   const d = new Date(iso);
-  return d.toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  return d.toLocaleTimeString(locale, { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
 function formatFull(iso: string): string {
@@ -31,6 +32,7 @@ function formatFull(iso: string): string {
 }
 
 export default function AuditLog() {
+  const { t, i18n } = useTranslation("audit");
   const [events, setEvents] = useState<AuditEvent[]>([]);
   const [expanded, setExpanded] = useState<number | null>(null);
   const [actionFilter, setActionFilter] = useState("");
@@ -49,9 +51,9 @@ export default function AuditLog() {
       setEvents(data);
       setError("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load audit events");
+      setError(err instanceof Error ? err.message : t("loadFailed"));
     }
-  }, [actionFilter, actorFilter, limit]);
+  }, [actionFilter, actorFilter, limit, t]);
 
   useEffect(() => {
     loadEvents();
@@ -64,9 +66,9 @@ export default function AuditLog() {
     <div style={{ padding: 28 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
         <div>
-          <div style={{ fontSize: sz.xl, fontWeight: 600, fontFamily: fonts.mono }}>Audit Log</div>
+          <div style={{ fontSize: sz.xl, fontWeight: 600, fontFamily: fonts.mono }}>{t("title")}</div>
           <div style={{ fontSize: sz.base, color: C.textDim, marginTop: 2 }}>
-            {events.length} events · {autoRefresh ? "30s auto-refresh" : "paused"}
+            {t("eventCount", { total: events.length })} · {autoRefresh ? t("autoRefresh") : t("paused")}
           </div>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -80,9 +82,9 @@ export default function AuditLog() {
               cursor: "pointer", fontFamily: fonts.mono, fontSize: sz.sm,
             }}
           >
-            {autoRefresh ? "\u25CF Live" : "\u25CB Paused"}
+            {autoRefresh ? t("live") : t("pausedButton")}
           </button>
-          <Btn secondary small onClick={loadEvents}>Refresh</Btn>
+          <Btn secondary small onClick={loadEvents}>{t("refresh")}</Btn>
         </div>
       </div>
 
@@ -93,15 +95,15 @@ export default function AuditLog() {
       )}
 
       <div style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
-        <TextInput placeholder="Filter by action…" value={actionFilter} onChange={setActionFilter} style={{ width: 200 }} />
-        <TextInput placeholder="Filter by actor ID…" value={actorFilter} onChange={setActorFilter} style={{ width: 200 }} />
+        <TextInput placeholder={t("actionPlaceholder")} value={actionFilter} onChange={setActionFilter} style={{ width: 200 }} />
+        <TextInput placeholder={t("actorPlaceholder")} value={actorFilter} onChange={setActorFilter} style={{ width: 200 }} />
       </div>
 
       <Card style={{ padding: 0 }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: sz.base }}>
           <thead>
             <tr>
-              {["Timestamp", "Event", "Actor", "Detail", ""].map((h) => (
+              {[t("timestamp"), t("event"), t("actor"), t("detail"), ""].map((h) => (
                 <th key={h} style={{ textAlign: "left", padding: "10px 16px", color: C.textDim, fontFamily: fonts.mono, fontSize: sz.xs, textTransform: "uppercase", letterSpacing: 1.2, borderBottom: `1px solid ${C.border}`, fontWeight: 400 }}>
                   {h}
                 </th>
@@ -123,7 +125,7 @@ export default function AuditLog() {
                   onMouseLeave={(ev) => { if (expanded !== i) ev.currentTarget.style.background = "transparent"; }}
                 >
                   <td style={{ padding: "10px 16px" }}>
-                    <Mono>{formatTime(e.created_at)}</Mono>
+                    <Mono>{formatTime(e.created_at, i18n.language)}</Mono>
                   </td>
                   <td style={{ padding: "10px 16px" }}>
                     <Tag color={eventColor(e.action)}>{e.action}</Tag>
@@ -141,12 +143,12 @@ export default function AuditLog() {
                     <td colSpan={5} style={{ padding: "12px 16px 16px" }}>
                       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
                         {[
-                          ["event", e.action],
-                          ["timestamp", formatFull(e.created_at)],
-                          ["actor_id", e.actor_id || "\u2014"],
-                          ["actor_type", e.actor_type || "\u2014"],
-                          ["client_id", e.client_id || "\u2014"],
-                          ["detail", e.detail || "\u2014"],
+                          [t("event"), e.action],
+                          [t("timestamp"), formatFull(e.created_at)],
+                          [t("actorId"), e.actor_id || "\u2014"],
+                          [t("actorType"), e.actor_type || "\u2014"],
+                          [t("clientId"), e.client_id || "\u2014"],
+                          [t("detail"), e.detail || "\u2014"],
                         ].map(([k, v]) => (
                           <div key={k}>
                             <div style={{ fontSize: sz.xs, fontFamily: fonts.mono, color: C.textDim, textTransform: "uppercase", letterSpacing: 1, marginBottom: 2 }}>
@@ -189,7 +191,7 @@ export default function AuditLog() {
         </table>
         {events.length === 0 && (
           <div style={{ padding: "20px 16px", fontSize: sz.base, color: C.textDim, textAlign: "center" }}>
-            No audit events found.
+            {t("noEvents")}
           </div>
         )}
       </Card>

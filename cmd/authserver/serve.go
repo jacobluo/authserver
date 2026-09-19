@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -172,6 +173,9 @@ func runServe() error {
 	// The cache is always on (WithUserCache requires a non-nil cache); the
 	// fixed 60s/1024 bound is intentional. A zero TTL here would expire every
 	// entry immediately (a DB query per request), so keep it positive.
+	// Admin sessions re-read the database so changes from another process
+	// take effect immediately, independently of the public session cache.
+	rawUsers := ds.User()
 	ds = storage.WithUserCache(ds, cache.NewMemoryTTLBounded[*storage.Entry](60*time.Second, 1024))
 
 	// 4. Setup key store via factory (no driver-specific logic here)
@@ -971,17 +975,26 @@ func runServe() error {
 		)
 		issuanceAdminDeps := &apiadmin.IssuanceAdminDeps{Issuances: issuanceAdminSvc}
 
+		csrfKey := sha256.Sum256(append([]byte("authplane-admin-csrf:"), sessionSecret...))
+		adminLoginSvc := services.NewAdminLoginService(authSvc, rawUsers, ds.AdminSession(), csrfKey[:])
+		adminLoginCtx, cancelAdminLogin := context.WithCancel(context.Background())
+		defer cancelAdminLogin()
+		adminLoginLockout := shared.NewAuthLockout(adminLoginCtx, cfg.RateLimit, obs.Logger)
+
 		var aerr error
 		adminSrv, aerr = apiadmin.NewServer(context.Background(), cfg.Admin, adminSvc, obs.WithComponent("admin-http"), apiadmin.OptionalDeps{
-			System:          systemDeps,
-			Keys:            keysDeps,
-			DCR:             dcrDeps,
-			XAA:             xaaDeps,
-			Resources:       resourceAdminDeps,
-			BrokerProviders: brokerProviderAdminDeps,
-			Grants:          grantAdminDeps,
-			Issuances:       issuanceAdminDeps,
-			Fronting:        frontingAdminDeps,
+			AdminLogin:        adminLoginSvc,
+			AdminLoginLockout: adminLoginLockout,
+			AdminCookieSecure: cfg.Session.Secure,
+			System:            systemDeps,
+			Keys:              keysDeps,
+			DCR:               dcrDeps,
+			XAA:               xaaDeps,
+			Resources:         resourceAdminDeps,
+			BrokerProviders:   brokerProviderAdminDeps,
+			Grants:            grantAdminDeps,
+			Issuances:         issuanceAdminDeps,
+			Fronting:          frontingAdminDeps,
 		})
 		if aerr != nil {
 			return fmt.Errorf("admin server: %w", aerr)

@@ -5,6 +5,7 @@ package sqlite_test
 import (
 	"context"
 	"database/sql"
+	"io/fs"
 	"sort"
 	"strings"
 	"testing"
@@ -14,22 +15,9 @@ import (
 	migrations "github.com/authplane/authserver/migrations/sqlite"
 )
 
-// TestMigrations_001Initial_UpDownUpRoundTrip closes the BRIEF §1
-// pre-release exit gate: the consolidated `001_initial.up.sql` and
-// `001_initial.down.sql` are exercised in CI as a fresh-install +
-// drop-everything roundtrip. Previously, the up script ran on every
-// integration boot but the down script was never exercised —
-// adds permanent coverage.
-//
-// Round trip:
-//
-//   - Apply 001_initial.up.sql → assert every expected table exists.
-//   - Apply 001_initial.down.sql → assert every expected table is
-//     dropped (only sqlite_sequence and the schema_migrations row may
-//     linger; the down script drops schema_migrations too).
-//   - Re-apply 001_initial.up.sql → assert the schema is identical to
-//     the first up (table names match exactly).
-func TestMigrations_001Initial_UpDownUpRoundTrip(t *testing.T) {
+// TestMigrations_UpDownUpRoundTrip applies every migration, rolls them back
+// in reverse version order, and recreates the complete schema.
+func TestMigrations_UpDownUpRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	obs := observability.NewNoop()
 
@@ -53,15 +41,19 @@ func TestMigrations_001Initial_UpDownUpRoundTrip(t *testing.T) {
 		}
 	}
 
-	// Pass 2: down. The 001_initial.down.sql script drops every table
-	// the up script created (FK-respecting reverse order, including
-	// schema_migrations).
-	downSQL, err := migrations.Migrations.ReadFile("001_initial.down.sql")
+	// Pass 2: undo later migrations before dropping their parent tables.
+	downFiles, err := fs.Glob(migrations.Migrations, "*.down.sql")
 	if err != nil {
-		t.Fatalf("read down script: %v", err)
+		t.Fatalf("list down scripts: %v", err)
 	}
-	if _, err := db.DB.ExecContext(ctx, string(downSQL)); err != nil {
-		t.Fatalf("apply down script: %v", err)
+	for i := len(downFiles) - 1; i >= 0; i-- {
+		downSQL, readErr := migrations.Migrations.ReadFile(downFiles[i])
+		if readErr != nil {
+			t.Fatalf("read %s: %v", downFiles[i], readErr)
+		}
+		if _, execErr := db.DB.ExecContext(ctx, string(downSQL)); execErr != nil {
+			t.Fatalf("apply %s: %v", downFiles[i], execErr)
+		}
 	}
 	tablesAfterDown := listSQLiteTables(t, db.DB)
 	for _, table := range expectedSQLiteTables {
@@ -83,12 +75,9 @@ func TestMigrations_001Initial_UpDownUpRoundTrip(t *testing.T) {
 	}
 }
 
-// expectedSQLiteTables enumerates the tables 001_initial.up.sql
-// creates (regenerate via `grep -E "^CREATE TABLE" 001_initial.up.sql`
-// when adding tables in a future migration).  added this list as
-// the explicit assertion target so a regression that drops a CREATE
-// TABLE shows up here, not silently downstream.
+// expectedSQLiteTables names the tables required after all migrations.
 var expectedSQLiteTables = []string{
+	"admin_sessions",
 	"clients",
 	"users",
 	"auth_sessions",

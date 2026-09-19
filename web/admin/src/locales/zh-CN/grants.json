@@ -1,0 +1,11 @@
+{
+  "title": "授权", "subtitle": "按用户查看授权 — 同意授权（Mint 交换）和 Broker 授权（上游凭证代理）。",
+  "directoryLoadFailed": "加载目录失败", "grantsLoadFailed": "加载授权失败", "consentRevoked": "同意授权已撤销", "brokerRevoked": "Broker 授权已撤销", "revokeFailed": "撤销失败",
+  "searchUsers": "搜索用户…", "noUsers": "没有用户。", "selectUser": "选择用户以查看其授权。", "loading": "加载中…",
+  "consent": "同意", "broker": "Broker", "revokeTitle": "撤销{{kind}}授权？", "cancel": "取消", "revoke": "撤销",
+  "consentRevokeCopy": "撤销 {{client}} 对 {{resource}} 的访问同意？这将阻止未来的 Mint 交换，并撤销匹配的有效 Mint 签发记录。已经发出的 Broker 令牌不受影响。",
+  "brokerRevokeCopy": "撤销 {{user}} 与 {{provider}} 的 Broker 连接？未来的 Broker 交换将返回 consent_required。已发出的上游令牌在到期前仍然有效 — Authplane 无法在上游使它们失效。",
+  "consentGrants": "同意授权（{{count}}）", "noConsentGrants": "没有同意授权。", "brokerGrants": "Broker 授权（{{count}}）", "noBrokerGrants": "没有 Broker 授权。",
+  "agent": "智能体", "resource": "资源", "scopes": "权限范围", "created": "创建时间", "status": "状态", "provider": "提供方", "scopesGranted": "已授予的权限范围", "version": "版本", "encBackend": "加密后端",
+  "revoked": "已撤销", "active": "有效", "issuances": "签发记录", "viewConsentIssuances": "查看此用户、客户端、资源组合的签发记录", "viewBrokerIssuances": "查看此用户的 Broker 签发记录"
+}

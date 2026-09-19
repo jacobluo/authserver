@@ -20,6 +20,7 @@ import type {
 import Btn from "./Btn";
 import Mono from "./Mono";
 import Tag from "./Tag";
+import { useTranslation } from "../i18n";
 
 interface ResourceFrontingSectionProps {
   slug: string;
@@ -48,6 +49,7 @@ export default function ResourceFrontingSection({
   onEditLink,
   onScopeCountsChange,
 }: ResourceFrontingSectionProps) {
+  const { t } = useTranslation("fronting");
   const [data, setData] = useState<ResourceFrontingView | null>(null);
   const [error, setError] = useState("");
 
@@ -60,9 +62,9 @@ export default function ResourceFrontingSection({
         onScopeCountsChange(computeScopeCounts(scopes, d));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load fronting");
+      setError(err instanceof Error ? err.message : t("loadLinksFailed"));
     }
-  }, [slug, scopes, onScopeCountsChange]);
+  }, [slug, scopes, onScopeCountsChange, t]);
 
   useEffect(() => {
     load();
@@ -88,7 +90,7 @@ export default function ResourceFrontingSection({
   if (!data) {
     return (
       <div style={{ fontSize: sz.sm, color: C.textDim, fontStyle: "italic" }}>
-        Loading fronting links…
+        {t("loadingLinks")}
       </div>
     );
   }
@@ -97,9 +99,9 @@ export default function ResourceFrontingSection({
     <div style={{ display: "grid", gap: 16 }}>
       {kind === "mint" && (
         <FrontingList
-          title="Fronts"
-          subtitle="Outbound links — this resource is the source."
-          emptyText="This Resource doesn't front any other Resource."
+          title={t("fronts")}
+          subtitle={t("frontsSubtitle")}
+          emptyText={t("frontsEmpty")}
           links={data.fronts}
           slug={slug}
           showCreate
@@ -108,9 +110,9 @@ export default function ResourceFrontingSection({
         />
       )}
       <FrontingList
-        title="Fronted by"
-        subtitle="Inbound links — this resource is the target."
-        emptyText="This Resource isn't fronted by any other Resource."
+        title={t("frontedBy")}
+        subtitle={t("frontedBySubtitle")}
+        emptyText={t("frontedByEmpty")}
         links={data.fronted_by}
         slug={slug}
         showCreate={false}
@@ -141,6 +143,7 @@ function FrontingList({
   onCreate,
   onEdit,
 }: FrontingListProps) {
+  const { t } = useTranslation("fronting");
   return (
     <div>
       <div
@@ -177,7 +180,7 @@ function FrontingList({
         </div>
         {showCreate && (
           <Btn small secondary onClick={onCreate}>
-            + Add fronting link
+            {t("addLink")}
           </Btn>
         )}
       </div>
@@ -225,7 +228,7 @@ function FrontingList({
                   <Tag color={C.textDim}>{summary}</Tag>
                 </div>
                 <Btn small secondary onClick={() => onEdit(l)}>
-                  Edit
+                  {t("edit")}
                 </Btn>
               </div>
             );
@@ -264,6 +267,7 @@ interface ScopeBadgeProps {
 }
 
 export function ScopeFrontingBadge({ scopeName, links }: ScopeBadgeProps) {
+  const { t } = useTranslation("fronting");
   const [open, setOpen] = useState(false);
   if (links.length === 0) return null;
   return (
@@ -281,9 +285,9 @@ export function ScopeFrontingBadge({ scopeName, links }: ScopeBadgeProps) {
           cursor: "pointer",
           width: "fit-content",
         }}
-        title={`${links.length} fronting link(s) reference '${scopeName}'`}
+        title={t("scopeLinksTitle", { count: links.length, scope: scopeName })}
       >
-        {links.length} link{links.length === 1 ? "" : "s"}
+        {t("linkCount", { count: links.length })}
       </span>
       {open && (
         <div

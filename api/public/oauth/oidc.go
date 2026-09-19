@@ -36,6 +36,7 @@ type oidcHandler struct {
 
 // handleOIDCStart initiates the OIDC flow by redirecting to the upstream IdP.
 func (h *oidcHandler) handleOIDCStart(w http.ResponseWriter, r *http.Request) {
+	shared.PageLocaleForRequest(w, r)
 	redirect := r.URL.Query().Get("redirect")
 	if redirect == "" {
 		redirect = "/"
@@ -238,18 +239,20 @@ func (h *oidcHandler) clearOIDCStateCookie(ctx context.Context, w http.ResponseW
 
 // oidcError builds the OIDC error page data with the mount prefix populated.
 func (h *oidcHandler) oidcError(r *http.Request, msg string) oidcErrorData {
+	locale := shared.PageLocaleForRequest(nil, r)
 	return oidcErrorData{
+		Locale:   locale,
 		Error:    msg,
-		LoginURL: shared.ResolvePath(r.Context(), h.urls, "/login", h.obs.Logger),
+		LoginURL: locale.Link(shared.ResolvePath(r.Context(), h.urls, "/login", h.obs.Logger)),
 	}
 }
 
 var oidcErrorTmpl = template.Must(template.New("oidc_error").Parse(`<!DOCTYPE html>
-<html lang="en">
+<html lang="{{.Locale.Code}}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Authentication Error — Authplane</title>
+<title>{{.Locale.Text "Authentication Error"}} — Authplane</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
@@ -272,10 +275,13 @@ a{display:inline-flex;align-items:center;gap:6px;color:#4f46e5;text-decoration:n
 font-weight:600;font-size:0.92em;transition:color 0.15s ease}
 a:hover{color:#4338ca}
 .footer{text-align:center;margin-top:24px;font-size:0.8em;color:#94a3b8}
+.language{text-align:right;margin-bottom:12px;font-size:0.82em}
+.language a{color:#4f46e5;text-decoration:none}
 </style>
 </head>
 <body>
 <div class="wrapper">
+<div class="language"><a href="{{.Locale.SwitchURL}}">{{.Locale.SwitchLabel}}</a></div>
 <div class="logo">
 <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
 <rect width="40" height="40" rx="10" fill="#4f46e5"/>
@@ -291,11 +297,11 @@ a:hover{color:#4338ca}
 <circle cx="24" cy="32" r="1.5" fill="#dc2626"/>
 </svg>
 </div>
-<h1>Authentication failed</h1>
-<div class="error">{{.Error}}</div>
-<a href="{{.LoginURL}}">Back to sign in</a>
+<h1>{{.Locale.Text "Authentication failed"}}</h1>
+<div class="error">{{.Locale.Text .Error}}</div>
+<a href="{{.LoginURL}}">{{.Locale.Text "Back to sign in"}}</a>
 </div>
-<div class="footer">Secured by Authplane</div>
+<div class="footer">{{.Locale.Text "Secured by Authplane"}}</div>
 </div>
 </body>
 </html>`))

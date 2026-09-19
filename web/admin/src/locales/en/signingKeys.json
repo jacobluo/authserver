@@ -1,0 +1,10 @@
+{
+  "title": "Signing Keys", "subtitle": "JWT signing key management", "loadFailed": "Failed to load", "fetchFailed": "Failed to fetch JWKS endpoint",
+  "keyStore": "Key Store", "testing": "Testing…", "testJwks": "Test JWKS", "currentKey": "Current Key", "algorithm": "Algorithm", "status": "Status",
+  "jwksResponse": "JWKS Response", "close": "Close", "jwksSettings": "JWKS Settings", "agentListing": "Agent listing in JWKS",
+  "listingEnabled": "Enabled — JWKS includes an agents array", "listingDisabled": "Disabled — JWKS exposes signing keys only",
+  "listingDescriptionBefore": "When enabled, JWKS includes an", "listingDescriptionAfter": "array listing all registered agent clients. Enable only if your MCP servers need to validate agent identity from JWKS.",
+  "agentsEnabled": "Agents feature is enabled.", "agentsVisible": "Agent clients appear in JWKS.", "agentsHidden": "JWKS listing is off — agents not exposed in JWKS.",
+  "readOnlyNotice": "This setting is read-only in the UI — configure via server YAML.",
+  "statusValue": { "unknown": "unknown", "healthy": "healthy", "degraded": "degraded", "unhealthy": "unhealthy" }
+}
