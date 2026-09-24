@@ -386,6 +386,24 @@ func (h *handlers) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 	shared.WriteJSON(w, http.StatusOK, newUserView(updated))
 }
 
+func (h *handlers) handleResetUserPassword(w http.ResponseWriter, r *http.Request) {
+	id, ok := validPathParam(w, "id", r.PathValue("id"))
+	if !ok {
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxAdminBody)
+	var req resetUserPasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if err := h.admin.ResetUserPassword(r.Context(), id, req.Password); err != nil {
+		writeDomainOrInternalError(w, r, h.obs, "reset user password failed", err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *handlers) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	id, ok := validPathParam(w, "id", r.PathValue("id"))
 	if !ok {

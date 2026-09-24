@@ -1242,6 +1242,31 @@ paths:
         required: true
         schema:
           type: string
+  /admin/users/{id}/password:
+    patch:
+      operationId: http-admin-users-id-password-update
+      summary: '`PATCH /admin/users/{id}/password`'
+      tags:
+        - admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetUserPasswordRequest'
+      responses:
+        "204":
+          description: No Content
+      security:
+        - AdminAPIKey: []
+        - AdminCSRF: []
+          AdminSessionCookie: []
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
   /admin/users/{id}/tokens:
     get:
       operationId: http-admin-users-id-tokens-list
@@ -2048,6 +2073,14 @@ components:
           type: boolean
       required:
         - enabled
+    ResetUserPasswordRequest:
+      type: object
+      properties:
+        password:
+          type: string
+      required:
+        - password
+      description: resetUserPasswordRequest is the JSON body for PATCH /admin/users/{id}/password.
     ResourceFrontingView:
       type: object
       properties:

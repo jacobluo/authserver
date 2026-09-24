@@ -30,6 +30,7 @@ type AdminPort interface {
 	EnableUser(ctx context.Context, id string) error
 	ForceLogoutUser(ctx context.Context, id string) (int, error)
 	UpdateUser(ctx context.Context, id string, req UpdateUserRequest) (*user.User, error)
+	ResetUserPassword(ctx context.Context, id, password string) error
 	DeleteUser(ctx context.Context, id string, force bool) error
 
 	// --- Tokens ---
