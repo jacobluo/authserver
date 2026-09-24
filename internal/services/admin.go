@@ -768,6 +768,38 @@ func (s *AdminService) UpdateUser(ctx context.Context, id string, req input.Upda
 	return u, nil
 }
 
+// ResetUserPassword replaces the password of a local account without exposing it in audit or logs.
+func (s *AdminService) ResetUserPassword(ctx context.Context, id, password string) error {
+	ctx, span := s.tracer.Start(ctx, "AdminService.ResetUserPassword")
+	defer span.End()
+	span.SetAttributes(attribute.String("user_id", id))
+
+	if len(password) < 8 || len(password) > 72 {
+		return domain.NewInvalidRequestError("password must be 8 to 72 bytes")
+	}
+	u, err := s.users.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if !u.IsLocal() {
+		return domain.NewConflictError("password can only be reset for local users")
+	}
+	hash, err := crypto.HashBcrypt(password)
+	if err != nil {
+		return fmt.Errorf("hash password: %w", err)
+	}
+	u.PasswordHash = hash
+	u.UpdatedAt = time.Now().UTC()
+	if err := s.users.Update(ctx, u); err != nil {
+		return fmt.Errorf("update user password: %w", err)
+	}
+	if s.audit != nil {
+		s.audit.Record(ctx, audit.NewEvent(audit.ActionUserPasswordReset, "admin", "", "", "user="+id))
+	}
+	s.logger.InfoContext(ctx, "user password reset via admin", "user_id", id)
+	return nil
+}
+
 // DeleteUser implements input.AdminPort.
 func (s *AdminService) DeleteUser(ctx context.Context, id string, force bool) error {
 	ctx, span := s.tracer.Start(ctx, "AdminService.DeleteUser")

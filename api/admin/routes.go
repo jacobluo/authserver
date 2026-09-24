@@ -97,6 +97,7 @@ func registerRoutes(mux *http.ServeMux, authMW AuthWrapper, admin Provider, obs 
 	mux.Handle("POST /admin/users", authMW.Wrap(http.HandlerFunc(h.handleCreateUser)))
 	mux.Handle("GET /admin/users/{id}", authMW.Wrap(http.HandlerFunc(h.handleGetUser)))
 	mux.Handle("PATCH /admin/users/{id}", authMW.Wrap(http.HandlerFunc(h.handleUpdateUser)))
+	mux.Handle("PATCH /admin/users/{id}/password", authMW.Wrap(http.HandlerFunc(h.handleResetUserPassword)))
 	mux.Handle("DELETE /admin/users/{id}", authMW.Wrap(http.HandlerFunc(h.handleDeleteUser)))
 	mux.Handle("GET /admin/users/{id}/tokens", authMW.Wrap(http.HandlerFunc(h.handleListUserTokens)))
 	mux.Handle("DELETE /admin/users/{id}/tokens", authMW.Wrap(http.HandlerFunc(h.handleForceLogoutUser)))

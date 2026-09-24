@@ -788,6 +788,7 @@ var routeBodyHints = map[string]string{ //nolint:gosec // G101: literal example 
 	"GET /admin/users":                "**Response 200** — JSON array of {{dto:userView}}.\n",
 	"GET /admin/users/{id}":           "**Response 200** — {{dto:userView}}.\n",
 	"PATCH /admin/users/{id}":         "**Request** — JSON {{dto:updateUserRequest}}. **Response 200** — {{dto:userView}}.\n",
+	"PATCH /admin/users/{id}/password": "**Request** — JSON {{dto:resetUserPasswordRequest}} with an 8–72 byte password for a local account. **Response 204** — no body. Existing sessions and tokens remain valid.\n",
 	"DELETE /admin/users/{id}":        "**Response 204** — no body.\n",
 	"GET /admin/users/{id}/tokens":    "**Response 200** — `{ tokens: [...] }` (issuance summary; see `api/admin/handlers.go`).\n",
 	"DELETE /admin/users/{id}/tokens": "**Response 200** — JSON `{ revoked: N }`.\n",

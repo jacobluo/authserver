@@ -70,6 +70,11 @@ type updateUserRequest struct {
 	Name  *string `json:"name,omitempty"`
 }
 
+// resetUserPasswordRequest is the JSON body for PATCH /admin/users/{id}/password.
+type resetUserPasswordRequest struct {
+	Password string `json:"password"`
+}
+
 // statusResponse is the JSON body for simple status-only responses.
 type statusResponse struct {
 	Status string `json:"status"`

@@ -76,3 +76,24 @@ test("a failed account logout preserves CSRF authentication for a retry", async 
     globalThis.fetch = originalFetch;
   }
 });
+
+test("password reset sends only the new password through the authenticated API", async () => {
+  const api = require(resolve(projectDir, "src/api.ts"));
+  const originalFetch = globalThis.fetch;
+  let request;
+  globalThis.fetch = async (path, options = {}) => {
+    request = { path, options };
+    return new Response(null, { status: 204 });
+  };
+  try {
+    api.setApiKey("test-api-key");
+    await api.resetUserPassword("user/1", "new-password-123");
+    assert.equal(request.path, "/admin/users/user%2F1/password");
+    assert.equal(request.options.method, "PATCH");
+    assert.equal(new Headers(request.options.headers).get("Authorization"), "Bearer test-api-key");
+    assert.deepEqual(JSON.parse(request.options.body), { password: "new-password-123" });
+  } finally {
+    api.clearApiKey();
+    globalThis.fetch = originalFetch;
+  }
+});

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import type { FormEvent } from "react";
 import { C, fonts, sz, alpha } from "../tokens";
-import { listUsers, createUser, disableUser, enableUser } from "../api";
+import { listUsers, createUser, disableUser, enableUser, resetUserPassword } from "../api";
 import type { UserView } from "../api";
 import Card from "../components/Card";
 import Btn from "../components/Btn";
@@ -40,6 +40,11 @@ export default function Users() {
   const [createForm, setCreateForm] = useState({ email: "", name: "", password: "" });
   const [createError, setCreateError] = useState("");
   const [creating, setCreating] = useState(false);
+  const [passwordUser, setPasswordUser] = useState<UserView | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [resettingPassword, setResettingPassword] = useState(false);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -122,6 +127,41 @@ export default function Users() {
       setCreateError(err instanceof Error ? err.message : t("createFailed"));
     } finally {
       setCreating(false);
+    }
+  };
+
+  const closePasswordReset = () => {
+    if (resettingPassword) return;
+    setPasswordUser(null);
+    setNewPassword("");
+    setConfirmPassword("");
+    setPasswordError("");
+  };
+
+  const handlePasswordReset = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!passwordUser || resettingPassword) return;
+    const bytes = new TextEncoder().encode(newPassword).length;
+    if (bytes < 8 || bytes > 72) {
+      setPasswordError(t("passwordLength"));
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError(t("passwordMismatch"));
+      return;
+    }
+    setResettingPassword(true);
+    setPasswordError("");
+    try {
+      await resetUserPassword(passwordUser.id, newPassword);
+      setPasswordUser(null);
+      setNewPassword("");
+      setConfirmPassword("");
+      showToast(t("passwordResetSuccess"));
+    } catch (err) {
+      setPasswordError(err instanceof Error ? err.message : t("passwordResetFailed"));
+    } finally {
+      setResettingPassword(false);
     }
   };
 
@@ -218,6 +258,9 @@ export default function Users() {
               ) : (
                 <Btn secondary small full onClick={() => handleEnable(selected.id)}>{t("enableUser")}</Btn>
               )}
+              {selected.provider === "local" && (
+                <Btn secondary small full onClick={() => setPasswordUser(selected)}>{t("resetPassword")}</Btn>
+              )}
             </div>
           </div>
 
@@ -248,6 +291,30 @@ export default function Users() {
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 24 }}>
               <Btn secondary onClick={closeCreate} disabled={creating}>{t("cancel")}</Btn>
               <Btn type="submit" disabled={creating}>{creating ? t("creating") : t("createUser")}</Btn>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {passwordUser && (
+        <Modal title={t("resetPassword")} titleColor={C.accent} onClose={closePasswordReset}>
+          <form onSubmit={handlePasswordReset}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <div style={{ fontSize: sz.base, color: C.textDim }}>{passwordUser.email}</div>
+              <label>
+                <Label>{t("newPassword")}</Label>
+                <TextInput type="password" value={newPassword} onChange={setNewPassword} />
+              </label>
+              <label>
+                <Label>{t("confirmPassword")}</Label>
+                <TextInput type="password" value={confirmPassword} onChange={setConfirmPassword} />
+              </label>
+              <div style={{ fontSize: sz.sm, color: C.textDim }}>{t("passwordResetNotice")}</div>
+              {passwordError && <div role="alert" style={{ fontSize: sz.sm, color: C.danger }}>{passwordError}</div>}
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 24 }}>
+              <Btn secondary onClick={closePasswordReset} disabled={resettingPassword}>{t("cancel")}</Btn>
+              <Btn type="submit" disabled={resettingPassword}>{resettingPassword ? t("resettingPassword") : t("resetPassword")}</Btn>
             </div>
           </form>
         </Modal>

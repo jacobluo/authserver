@@ -315,6 +315,13 @@ export async function getUser(id: string): Promise<UserView> {
   return apiFetch(`/admin/users/${id}`);
 }
 
+export async function resetUserPassword(id: string, password: string): Promise<void> {
+  return apiFetch(`/admin/users/${encodeURIComponent(id)}/password`, {
+    method: "PATCH",
+    body: JSON.stringify({ password }),
+  });
+}
+
 export async function disableUser(id: string): Promise<{ status: string }> {
   return apiFetch(`/admin/users/${id}/disable`, { method: "PATCH" });
 }

@@ -126,6 +126,8 @@ const (
 	ActionClientDeleted Action = "client.deleted"
 	// ActionUserUpdated records a user update event.
 	ActionUserUpdated Action = "user.updated"
+	// ActionUserPasswordReset records an administrator changing a local user's password.
+	ActionUserPasswordReset Action = "user.password_reset"
 	// ActionUserDeleted records a user deletion event.
 	ActionUserDeleted Action = "user.deleted"
 	// ActionForceLogout records a forced user logout event.

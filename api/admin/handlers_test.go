@@ -999,6 +999,81 @@ func TestAdminHandler_ForceLogoutUser_200(t *testing.T) {
 
 // --- Update User ---
 
+func TestAdminHandler_ResetUserPassword(t *testing.T) {
+	env := newAdminTestServerWithAudit(t)
+	u := createTestUser(t, env.stores.Stores)
+	oldPassword := "old-password-123"
+	oldHash, err := crypto.HashBcrypt(oldPassword)
+	if err != nil {
+		t.Fatal(err)
+	}
+	u.PasswordHash = oldHash
+	if err := env.stores.Stores.User.Update(context.Background(), u); err != nil {
+		t.Fatal(err)
+	}
+	newPassword := "a-new-password-123"
+
+	resp := env.doRequest(t, "PATCH", "/admin/users/"+u.ID+"/password", map[string]string{"password": newPassword})
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status: got %d, want 204, body: %s", resp.StatusCode, body)
+	}
+	updated, err := env.stores.Stores.User.GetByID(context.Background(), u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.PasswordHash == newPassword || crypto.CompareBcrypt(updated.PasswordHash, newPassword) != nil {
+		t.Fatal("new password was not stored as a usable bcrypt hash")
+	}
+	if crypto.CompareBcrypt(updated.PasswordHash, oldPassword) == nil {
+		t.Fatal("old password still authenticates")
+	}
+	events := env.rec.snapshot()
+	if len(events) != 1 || events[0].Action != audit.ActionUserPasswordReset || strings.Contains(events[0].Detail, newPassword) {
+		t.Fatalf("unexpected password reset audit events: %+v", events)
+	}
+}
+
+func TestAdminHandler_ResetUserPassword_RejectsInvalidRequests(t *testing.T) {
+	env := newAdminTestServer(t)
+	u := createTestUser(t, env.stores.Stores)
+
+	for _, tc := range []struct {
+		name     string
+		id       string
+		password string
+		status   int
+	}{
+		{"empty", u.ID, "", http.StatusBadRequest},
+		{"short", u.ID, "short", http.StatusBadRequest},
+		{"too long", u.ID, strings.Repeat("x", 73), http.StatusBadRequest},
+		{"missing user", "missing-user", "valid-password", http.StatusNotFound},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resp := env.doRequest(t, "PATCH", "/admin/users/"+tc.id+"/password", map[string]string{"password": tc.password})
+			defer func() { _ = resp.Body.Close() }()
+			if resp.StatusCode != tc.status {
+				body, _ := io.ReadAll(resp.Body)
+				t.Fatalf("status: got %d, want %d, body: %s", resp.StatusCode, tc.status, body)
+			}
+		})
+	}
+
+	u.Provider = user.ProviderOIDC
+	u.PasswordHash = ""
+	u.ProviderSub = "oidc-subject"
+	if err := env.stores.Stores.User.Update(context.Background(), u); err != nil {
+		t.Fatal(err)
+	}
+	resp := env.doRequest(t, "PATCH", "/admin/users/"+u.ID+"/password", map[string]string{"password": "valid-password"})
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusConflict {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("OIDC status: got %d, want 409, body: %s", resp.StatusCode, body)
+	}
+}
+
 func TestAdminHandler_UpdateUser_200(t *testing.T) {
 	env := newAdminTestServer(t)
 
