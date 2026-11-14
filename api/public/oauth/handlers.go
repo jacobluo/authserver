@@ -82,7 +82,17 @@ func (h *oauthHandler) resolveIssuer(w http.ResponseWriter, r *http.Request) (st
 
 // handleAuthorize handles GET /oauth/authorize.
 func (h *oauthHandler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
+	q, parseErr := url.ParseQuery(r.URL.RawQuery)
+	if parseErr != nil {
+		shared.WriteOAuthError(w, http.StatusBadRequest, "invalid_request", "invalid authorization query")
+		return
+	}
+	for _, key := range []string{"client_id", "redirect_uri", "response_type", "scope", "state", "resource", "code_challenge", "code_challenge_method"} {
+		if len(q[key]) > 1 {
+			shared.WriteOAuthError(w, http.StatusBadRequest, "invalid_request", "duplicate authorization parameters are not supported")
+			return
+		}
+	}
 
 	// Extract user ID from session middleware context.
 	userID, _ := shared.UserIDFromContext(r.Context())
@@ -529,7 +539,10 @@ func ExtractClientAuth(r *http.Request) (clientID, clientSecret string) {
 	}
 
 	// Fall back to form body.
-	return r.FormValue("client_id"), r.FormValue("client_secret")
+	if err := r.ParseForm(); err != nil {
+		return "", ""
+	}
+	return r.PostForm.Get("client_id"), r.PostForm.Get("client_secret")
 }
 
 func writeTokenResponse(w http.ResponseWriter, resp *input.TokenResponse) {

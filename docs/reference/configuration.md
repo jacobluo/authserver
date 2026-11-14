@@ -15,6 +15,7 @@ Authplane reads its configuration from a single YAML file (typically `/etc/auths
 - [`rate_limit`](#config-rate-limit)
 - [`admin`](#config-admin)
 - [`oauth`](#config-oauth)
+- [`userinfo`](#config-userinfo)
 - [`oidc`](#config-oidc)
 - [`observability`](#config-observability)
 - [`resources`](#config-resources)
@@ -166,8 +167,19 @@ OAuthConfig controls OAuth authorization server behavior.
 
 | Key | Type | Default | Env var | Notes |
 | --- | --- | --- | --- | --- |
+| `oauth.confidential_login_clients_without_pkce` | `[]string` | — | — | explicit admin-created confidential client IDs; only oneid:login without resource and exact HTTPS callback may omit PKCE |
 | `oauth.require_scope` | `bool` | `true` | `AUTHPLANE_OAUTH_REQUIRE_SCOPE` | RequireScope rejects authorize requests missing the scope parameter with invalid_scope. When false, missing scope is processed using a pre-defined default value: all scopes registered for the resource. RFC 6749 §3.3 requires the server to do one or the other — "either process the request using a pre-defined default value or fail the request indicating an invalid scope" — so both settings are conformant and this flag picks between them. Defaults to true. |
 | `oauth.state_max_age` | `duration` | `10m` | `AUTHPLANE_OAUTH_STATE_MAX_AGE` | StateMaxAge bounds the OIDC state cookie's lifetime: both the cookie's Max-Age attribute and the server-side freshness window checked at callback. Default 10m. A shorter value tightens the state replay window (regulatory or UX driven, per deployment). |
+
+## `userinfo`
+
+<a id="config-userinfo"></a>
+
+UserInfoConfig maps stable local subjects to administrator-approved login names.
+
+| Key | Type | Default | Env var | Notes |
+| --- | --- | --- | --- | --- |
+| `userinfo.preferred_usernames` | `map[string]string` | — | — | optional sub -> login-name map; unmapped users omit preferred_username when configured |
 
 ## `oidc`
 

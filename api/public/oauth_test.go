@@ -36,6 +36,7 @@ type oauthTestEnv struct {
 	stores     *testdata.TestHelper
 	authSvc    *services.UserAuthService
 	authzSvc   *services.AuthorizeService
+	tokenSvc   *services.TokenService
 	resourceID string // ID of the seeded Mint resource (for consent_grants.resource_id seeding)
 }
 
@@ -136,6 +137,7 @@ func newOAuthTestServer(t *testing.T) *oauthTestEnv {
 		stores:     &testdata.TestHelper{Stores: stores},
 		authSvc:    authSvc,
 		authzSvc:   authzSvc,
+		tokenSvc:   tokenSvc,
 		resourceID: mintRes.ID,
 	}
 }

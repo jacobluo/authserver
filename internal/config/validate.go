@@ -17,6 +17,8 @@ var connectorIDRegexp = regexp.MustCompile(`^[a-zA-Z0-9-]+$`)
 // Validate checks the configuration for required fields and consistency.
 func (c *Config) Validate() error {
 	var errs []error
+	errs = append(errs, c.UserInfo.validate()...)
+	errs = append(errs, c.OAuth.validateLoginClients()...)
 
 	if c.Server.Issuer == "" {
 		errs = append(errs, errors.New("server.issuer is required"))

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -20,13 +21,14 @@ var _ input.UserInfoPort = (*UserInfoService)(nil)
 // to this authorization server. Callers must supply uncached identity stores
 // so suspension, disablement and profile updates take effect on the next call.
 type UserInfoService struct {
-	keys       JWKSBuildProvider
-	revocation output.RevocationStore
-	families   output.TokenStore
-	machines   output.MachineTokenStore
-	clients    output.ClientStore
-	users      output.UserStore
-	issuer     output.IssuerProvider
+	keys               JWKSBuildProvider
+	revocation         output.RevocationStore
+	families           output.TokenStore
+	machines           output.MachineTokenStore
+	clients            output.ClientStore
+	users              output.UserStore
+	issuer             output.IssuerProvider
+	preferredUsernames map[string]string
 }
 
 func NewUserInfoService(keys JWKSBuildProvider, revocation output.RevocationStore, families output.TokenStore, machines output.MachineTokenStore, clients output.ClientStore, users output.UserStore, issuer output.IssuerProvider) *UserInfoService {
@@ -34,6 +36,13 @@ func NewUserInfoService(keys JWKSBuildProvider, revocation output.RevocationStor
 		panic("services.NewUserInfoService: all dependencies are required")
 	}
 	return &UserInfoService{keys: keys, revocation: revocation, families: families, machines: machines, clients: clients, users: users, issuer: issuer}
+}
+
+// WithPreferredUsernames installs a validated, administrator-controlled mapping
+// before serving requests. A configured map omits login names for unmapped
+// subjects, rather than falling back to mutable email or display-name claims.
+func (s *UserInfoService) WithPreferredUsernames(names map[string]string) {
+	s.preferredUsernames = maps.Clone(names)
 }
 
 func (s *UserInfoService) UserInfo(ctx context.Context, accessToken string) (*input.UserInfo, error) {
@@ -105,5 +114,9 @@ func (s *UserInfoService) UserInfo(ctx context.Context, accessToken string) (*in
 	if !slices.Contains(strings.Fields(claims.Scope), input.UserInfoScope) || !slices.Contains(strings.Fields(family.Scope), input.UserInfoScope) {
 		return nil, input.ErrUserInfoInsufficientScope
 	}
-	return &input.UserInfo{Subject: u.ID, Name: u.Name, Email: u.Email, PreferredUsername: u.Email}, nil
+	username := u.Email
+	if s.preferredUsernames != nil {
+		username = s.preferredUsernames[u.ID]
+	}
+	return &input.UserInfo{Subject: u.ID, Name: u.Name, Email: u.Email, PreferredUsername: username}, nil
 }

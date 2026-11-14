@@ -6,7 +6,8 @@ import (
 )
 
 // userInfoResponse is the JSON account profile from GET /oauth/userinfo and
-// GET /userinfo. preferred_username is the account's email login name.
+// GET /userinfo. preferred_username is an explicitly mapped login name, or the
+// account's email login name when no username mapping is configured.
 type userInfoResponse struct {
 	Subject           string `json:"sub"`
 	Name              string `json:"name,omitempty"`

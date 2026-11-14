@@ -27,19 +27,20 @@ import (
 
 // TokenService implements input.TokenPort.
 type TokenService struct {
-	sessions    output.SessionStore
-	tokens      output.TokenStore
-	clients     output.ClientStore
-	users       output.UserStore
-	jwks        JWKSSigningKeyProvider
-	mintIssuer  *MintIssuer            // signs Mint access tokens + writes the issuances audit row.
-	revocation  output.RevocationStore // optional, for JTI tracking (introspection support)
-	audit       AuditRecorder
-	tokenConfig output.TokenConfigProvider // resolves access/refresh TTLs per request
-	resources   ResourceLister             // resource catalog (kept for ResourceLister.List() walks)
-	logger      *slog.Logger
-	tracer      trace.Tracer
-	metrics     *observability.Metrics
+	oauth2LoginClients []string
+	sessions           output.SessionStore
+	tokens             output.TokenStore
+	clients            output.ClientStore
+	users              output.UserStore
+	jwks               JWKSSigningKeyProvider
+	mintIssuer         *MintIssuer            // signs Mint access tokens + writes the issuances audit row.
+	revocation         output.RevocationStore // optional, for JTI tracking (introspection support)
+	audit              AuditRecorder
+	tokenConfig        output.TokenConfigProvider // resolves access/refresh TTLs per request
+	resources          ResourceLister             // resource catalog (kept for ResourceLister.List() walks)
+	logger             *slog.Logger
+	tracer             trace.Tracer
+	metrics            *observability.Metrics
 
 	// DPoP support (RFC 9449) — optional. When dpopStore is nil, DPoP is disabled.
 	dpopStore  output.DPoPNonceStore
@@ -183,7 +184,7 @@ func (s *TokenService) exchangeCode(ctx context.Context, req input.ExchangeCodeR
 		// A replay: respond to it, then answer exactly as before. The store
 		// returns the session alongside ErrCodeConsumed precisely for this.
 		if errors.Is(err, domain.ErrCodeConsumed) && sess != nil {
-			s.handleCodeReuse(ctx, span, sess, req.CodeVerifier, req.ClientID)
+			s.handleCodeReuse(ctx, span, sess, req.CodeVerifier, req.ClientID, req.ClientSecret)
 		}
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -217,7 +218,14 @@ func (s *TokenService) exchangeCode(ctx context.Context, req input.ExchangeCodeR
 	}
 
 	// 6. Verify PKCE.
-	if pkceErr := crypto.VerifyS256(req.CodeVerifier, sess.CodeChallenge); pkceErr != nil {
+	pkceErr := crypto.VerifyS256(req.CodeVerifier, sess.CodeChallenge)
+	if sess.CodeChallenge == "" && sess.CodeChallengeMethod == "" && req.CodeVerifier == "" && req.Resource == "" {
+		c, lookupErr := s.clients.GetByID(ctx, sess.ClientID)
+		if lookupErr == nil && allowsOAuth2Login(c, s.oauth2LoginClients, sess.RedirectURI, sess.Scope, sess.Resource) {
+			pkceErr = nil
+		}
+	}
+	if pkceErr != nil {
 		span.RecordError(domain.ErrInvalidPKCE)
 		span.SetStatus(codes.Error, "PKCE verification failed")
 		return nil, domain.ErrInvalidPKCE
@@ -1127,9 +1135,11 @@ func (s *TokenService) auditReuse(ctx context.Context, action audit.Action, deta
 // worked.
 //
 // The detection is recorded unconditionally. Revocation is gated on the
-// replayer proving they could plausibly have been the original client: PKCE
-// is mandatory (authorize.go:110), so a replayer without the verifier could
-// never have redeemed this code, and the same is true of a caller presenting
+// replayer proving they could plausibly have been the original client: normally
+// this is the PKCE verifier. A deliberately allowlisted confidential login
+// client instead proves its secret when its original session omitted PKCE.
+// A replayer without that proof could never have redeemed this code, and the
+// same is true of a caller presenting
 // a different client_id than the one the session was issued to. Revoking on
 // either replayer's say-so would hand anyone who finds a spent code a
 // credential-free logout button for its owner. Full reasoning in
@@ -1140,9 +1150,15 @@ func (s *TokenService) auditReuse(ctx context.Context, action audit.Action, deta
 // "invalid" — it does not get its own value — so verifier="valid"|"invalid"
 // keeps meaning exactly what it always has: existing dashboards and alerts
 // built on those two values do not need to learn a third.
-func (s *TokenService) handleCodeReuse(ctx context.Context, span trace.Span, sess *session.AuthSession, verifier, clientID string) {
+func (s *TokenService) handleCodeReuse(ctx context.Context, span trace.Span, sess *session.AuthSession, verifier, clientID, clientSecret string) {
 	verifierOK := crypto.VerifyS256(verifier, sess.CodeChallenge) == nil
 	clientOK := clientID == sess.ClientID
+	// A legacy code has no verifier. Only the real confidential client may
+	// trigger family revocation; a captured spent code alone must not do so.
+	if !verifierOK && clientOK && sess.CodeChallenge == "" && sess.CodeChallengeMethod == "" && verifier == "" {
+		c, err := s.clients.GetByID(ctx, clientID)
+		verifierOK = err == nil && allowsOAuth2Login(c, s.oauth2LoginClients, sess.RedirectURI, sess.Scope, sess.Resource) && s.authenticateClient(ctx, span, clientID, clientSecret) == nil
+	}
 	credentialed := verifierOK && clientOK
 	label := "invalid"
 	if credentialed {

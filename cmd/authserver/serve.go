@@ -454,6 +454,8 @@ func runServe() error {
 		ds.Revocation(), resourceLister,
 	)
 	tokenSvc.WithTokenTransactions(ds.Transaction())
+	authzSvc.WithOAuth2LoginClients(cfg.OAuth.ConfidentialLoginClientsWithoutPKCE)
+	tokenSvc.WithOAuth2LoginClients(cfg.OAuth.ConfidentialLoginClientsWithoutPKCE)
 	// Wire the unified ResourceRegistry so the auth-code and refresh-token
 	// grants persist their issuances audit row (the FK target resources.id
 	// can only be resolved through the registry). Without this the admin
@@ -483,6 +485,7 @@ func runServe() error {
 	// the ownership check admits only the token's issuing client.
 	introspectSvc.WithResourceRegistry(resourceRegistry)
 	userInfoSvc := services.NewUserInfoService(jwksSvc, ds.Revocation(), ds.Token(), ds.MachineToken(), ds.Client(), ds.User(), issuerProvider)
+	userInfoSvc.WithPreferredUsernames(cfg.UserInfo.PreferredUsernames)
 
 	// 11c. Setup client credentials service (if enabled)
 	ccConfigProvider := static.NewClientCredentialsConfigProvider(output.ClientCredentialsConfig{

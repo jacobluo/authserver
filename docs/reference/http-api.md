@@ -2003,7 +2003,7 @@ protectedResourceMetadata is the JSON body for GET /.well-known/oauth-protected-
 
 registerRequest is the JSON body for POST /oauth/register: the RFC 7591 client metadata members this authorization server reads. Members outside this set are accepted and ignored, per RFC 7591 §3.1. (Kept as a wire DTO rather than decoding into the input port type so docsgen, which reads struct tags from this file, can publish a field table for the endpoint.)
 
-**Source** — `api/public/oauth/dto.go:88`
+**Source** — `api/public/oauth/dto.go:89`
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
@@ -2022,7 +2022,7 @@ registerRequest is the JSON body for POST /oauth/register: the RFC 7591 client m
 
 registerResponse is the JSON body returned by POST /oauth/register (RFC 7591 §3.2.1).
 
-**Source** — `api/public/oauth/dto.go:107`
+**Source** — `api/public/oauth/dto.go:108`
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
@@ -2194,7 +2194,7 @@ systemStatusResponse is the JSON body for GET /admin/system/status.
 
 tokenExchangeResponseDTO is the JSON response for RFC 8693 token exchange. It includes issued_token_type which is not present in standard token responses.
 
-**Source** — `api/public/oauth/dto.go:28`
+**Source** — `api/public/oauth/dto.go:29`
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
@@ -2210,7 +2210,7 @@ tokenExchangeResponseDTO is the JSON response for RFC 8693 token exchange. It in
 
 tokenResponseDTO is the JSON structure for POST /oauth/token responses.
 
-**Source** — `api/public/oauth/dto.go:18`
+**Source** — `api/public/oauth/dto.go:19`
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
@@ -2262,9 +2262,9 @@ updateDCRSettingsRequest is the JSON body for PATCH /admin/settings/dcr.
 
 <a id="dto-user-info-response"></a>
 
-userInfoResponse is the JSON account profile from GET /oauth/userinfo and GET /userinfo. preferred_username is the account's email login name.
+userInfoResponse is the JSON account profile from GET /oauth/userinfo and GET /userinfo. preferred_username is an explicitly mapped login name, or the account's email login name when no username mapping is configured.
 
-**Source** — `api/public/oauth/dto.go:10`
+**Source** — `api/public/oauth/dto.go:11`
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |

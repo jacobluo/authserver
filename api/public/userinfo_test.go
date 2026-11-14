@@ -78,6 +78,7 @@ func newUserInfoEnv(t *testing.T, alter func(*userInfoDeps)) *userInfoEnv {
 		alter(&deps)
 	}
 	svc := services.NewUserInfoService(deps.keys, deps.revocation, deps.families, deps.machines, deps.clients, deps.users, deps.issuer)
+	svc.WithPreferredUsernames(deps.preferredUsernames)
 	srv := apipublic.NewServer(context.Background(), testServerCfg(), apipublic.Deps{
 		CORSConfigProvider: testCORS(), URLs: testURLBuilder(), SessionSecretProvider: testSessionSecret(), SessionConfigProvider: testSessionConfig(), UserInfo: svc,
 	}, testObs())
@@ -90,13 +91,14 @@ func newUserInfoEnv(t *testing.T, alter func(*userInfoDeps)) *userInfoEnv {
 }
 
 type userInfoDeps struct {
-	keys       services.JWKSBuildProvider
-	revocation output.RevocationStore
-	families   output.TokenStore
-	machines   output.MachineTokenStore
-	clients    output.ClientStore
-	users      output.UserStore
-	issuer     output.IssuerProvider
+	preferredUsernames map[string]string
+	keys               services.JWKSBuildProvider
+	revocation         output.RevocationStore
+	families           output.TokenStore
+	machines           output.MachineTokenStore
+	clients            output.ClientStore
+	users              output.UserStore
+	issuer             output.IssuerProvider
 }
 
 func (e *userInfoEnv) signed(t *testing.T) string {
@@ -151,6 +153,56 @@ func TestUserInfo_ProfileAndAlias(t *testing.T) {
 		got := e.request(t, path, "Bearer "+e.signed(t), 200)
 		if got["sub"] != "login-user" || got["name"] != "Test User" || got["email"] != "login@example.com" || got["preferred_username"] != "login@example.com" || len(got) != 4 {
 			t.Fatalf("unexpected profile: %v", got)
+		}
+	}
+}
+
+func TestUserInfo_ExplicitUsernameMapping(t *testing.T) {
+	names := map[string]string{"login-user": "ExampleMember"}
+	e := newUserInfoEnv(t, func(d *userInfoDeps) { d.preferredUsernames = names })
+	// Configuration must be copied at startup, not held by reference.
+	names["login-user"] = "SomeoneElse"
+	got := e.request(t, "/oauth/userinfo", "Bearer "+e.signed(t), 200)
+	if got["preferred_username"] != "ExampleMember" || got["sub"] != "login-user" || got["email"] != "login@example.com" {
+		t.Fatalf("incorrect mapped profile: %v", got)
+	}
+}
+
+func TestUserInfo_UnmappedUserDoesNotInheritUsername(t *testing.T) {
+	for _, names := range []map[string]string{{}, {"another-user": "ExampleMember"}} {
+		e := newUserInfoEnv(t, func(d *userInfoDeps) { d.preferredUsernames = names })
+		got := e.request(t, "/oauth/userinfo", "Bearer "+e.signed(t), 200)
+		if _, ok := got["preferred_username"]; ok {
+			t.Fatalf("unmapped account received a login name: %v", got)
+		}
+		if got["sub"] != "login-user" || got["email"] != "login@example.com" {
+			t.Fatalf("unmapped profile changed identity: %v", got)
+		}
+	}
+}
+
+func TestOAuth2AuthorizeRejectsAmbiguousParameters(t *testing.T) {
+	e := newOAuthTestServer(t)
+	c, _ := e.createClient(t, false)
+	c.RegistrationSource = client.SourceAdmin
+	if err := e.stores.Stores.Client.Update(t.Context(), c); err != nil {
+		t.Fatal(err)
+	}
+	e.authzSvc.WithOAuth2LoginClients([]string{c.ID})
+	q := url.Values{"client_id": {c.ID}, "redirect_uri": {c.RedirectURIs[0]}, "response_type": {"code"}, "scope": {"oneid:login"}, "state": {"ambiguous"}}
+	hc := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	for _, suffix := range []string{"&code_challenge=&code_challenge=present&code_challenge_method=&code_challenge_method=S256", "&resource=&resource=https%3A%2F%2Fmcp.example.com", "&code_challenge=%GG"} {
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, e.ts.URL+"/oauth/authorize?"+q.Encode()+suffix, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err := hc.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != 400 {
+			t.Errorf("ambiguous or malformed authorization accepted: status=%d", resp.StatusCode)
 		}
 	}
 }
@@ -321,16 +373,30 @@ func TestUserInfo_FailsClosedOnStorageErrors(t *testing.T) {
 // Exercise the same form-post credentials and issuer audience used by OneID,
 // including browser login, consent, code exchange, refresh and revocation.
 func TestUserInfo_AuthorizationCodeFlow(t *testing.T) {
+	t.Run("PKCE", func(t *testing.T) { testUserInfoCodeFlow(t, false) })
+	t.Run("allowlisted OAuth2", func(t *testing.T) { testUserInfoCodeFlow(t, true) })
+}
+
+func testUserInfoCodeFlow(t *testing.T, withoutPKCE bool) {
 	e := newOAuthTestServer(t)
 	c, secret := e.createClient(t, false)
 	c.TokenEndpointAuthMethod = "client_secret_post"
 	c.GrantTypes = []string{"authorization_code", "refresh_token"}
+	if withoutPKCE {
+		c.RegistrationSource = client.SourceAdmin
+		e.authzSvc.WithOAuth2LoginClients([]string{c.ID})
+		e.tokenSvc.WithOAuth2LoginClients([]string{c.ID})
+	}
 	if err := e.stores.Stores.Client.Update(t.Context(), c); err != nil {
 		t.Fatal(err)
 	}
 	verifier := crypto.GenerateVerifier()
 	hc := &http.Client{Jar: &testCookieJar{cookies: e.loginAndGetCookie(t)}, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	query := url.Values{"client_id": {c.ID}, "redirect_uri": {c.RedirectURIs[0]}, "response_type": {"code"}, "scope": {"oneid:login"}, "state": {"userinfo-state"}, "code_challenge": {crypto.ComputeS256Challenge(verifier)}, "code_challenge_method": {"S256"}}
+	if withoutPKCE {
+		query.Del("code_challenge")
+		query.Del("code_challenge_method")
+	}
 	resp, err := hc.Get(e.ts.URL + "/oauth/authorize?" + query.Encode())
 	if err != nil {
 		t.Fatal(err)
@@ -394,7 +460,11 @@ func TestUserInfo_AuthorizationCodeFlow(t *testing.T) {
 		}
 		return result
 	}
-	tokens := exchange(url.Values{"grant_type": {"authorization_code"}, "code": {code}, "redirect_uri": {c.RedirectURIs[0]}, "code_verifier": {verifier}})
+	form := url.Values{"grant_type": {"authorization_code"}, "code": {code}, "redirect_uri": {c.RedirectURIs[0]}}
+	if !withoutPKCE {
+		form.Set("code_verifier", verifier)
+	}
+	tokens := exchange(form)
 	access, ok := tokens["access_token"].(string)
 	if !ok {
 		t.Fatal("missing access token")
