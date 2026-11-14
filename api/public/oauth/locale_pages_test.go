@@ -42,7 +42,7 @@ func TestPublicPagesDefaultToSimplifiedChinese(t *testing.T) {
 
 func TestLoginPostLanguageSwitchKeepsReturnDestination(t *testing.T) {
 	form := url.Values{"redirect": {"/consent?session_id=abc"}, "lang": {"en"}}
-	r := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(form.Encode()))
+	r := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/login", strings.NewReader(form.Encode()))
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	if err := r.ParseForm(); err != nil {
 		t.Fatal(err)
@@ -59,7 +59,7 @@ func TestLoginPostLanguageSwitchKeepsReturnDestination(t *testing.T) {
 
 func TestOIDCErrorEnglishBackLinkKeepsLanguage(t *testing.T) {
 	h := newTestHandler(t, nil, nil)
-	r := httptest.NewRequest(http.MethodGet, "/oidc/callback?lang=en&error=access_denied", nil)
+	r := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/oidc/callback?lang=en&error=access_denied", nil)
 	data := h.oidcError(r, "Authentication failed. Please try again.")
 	if !strings.Contains(data.LoginURL, "lang=en") {
 		t.Fatalf("English back-to-login link lost language: %q", data.LoginURL)
@@ -67,7 +67,7 @@ func TestOIDCErrorEnglishBackLinkKeepsLanguage(t *testing.T) {
 }
 
 func TestEnglishSelectionRendersAllPublicTemplates(t *testing.T) {
-	locale := shared.PageLocaleForRequest(nil, httptest.NewRequest(http.MethodGet, "/login?lang=en", nil))
+	locale := shared.PageLocaleForRequest(nil, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/login?lang=en", nil))
 	cases := []struct {
 		name   string
 		render func(*bytes.Buffer) error

@@ -1008,8 +1008,8 @@ func TestAdminHandler_ResetUserPassword(t *testing.T) {
 		t.Fatal(err)
 	}
 	u.PasswordHash = oldHash
-	if err := env.stores.Stores.User.Update(context.Background(), u); err != nil {
-		t.Fatal(err)
+	if updateErr := env.stores.Stores.User.Update(context.Background(), u); updateErr != nil {
+		t.Fatal(updateErr)
 	}
 	newPassword := "a-new-password-123"
 

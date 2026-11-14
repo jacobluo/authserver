@@ -17,6 +17,10 @@ type TokenStore interface {
 	// GetFamily returns a token family by ID.
 	GetFamily(ctx context.Context, id string) (*token.Family, error)
 
+	// GetFamilyByAccessTokenJTI finds the direct OAuth grant that tracked this
+	// access token. Returns ErrInvalidGrant when the JTI has no tracked family.
+	GetFamilyByAccessTokenJTI(ctx context.Context, jti string) (*token.Family, error)
+
 	// GetFamilyByAuthSessionID returns the family born from the given auth
 	// session. Not found returns ErrInvalidGrant, matching GetFamily.
 	//

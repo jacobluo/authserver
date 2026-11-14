@@ -114,9 +114,11 @@ All endpoints are documented from their route registration site in `api/public/*
 | `POST` | `/oauth/register` | public | [#http-public-oauth-register](#http-public-oauth-register) |
 | `POST` | `/oauth/revoke` | public | [#http-public-oauth-revoke](#http-public-oauth-revoke) |
 | `POST` | `/oauth/token` | public | [#http-public-oauth-token](#http-public-oauth-token) |
+| `GET` | `/oauth/userinfo` | public | [#http-public-oauth-userinfo](#http-public-oauth-userinfo) |
 | `GET` | `/oidc/callback` | public | [#http-public-oidc-callback](#http-public-oidc-callback) |
 | `GET` | `/oidc/start` | public | [#http-public-oidc-start](#http-public-oidc-start) |
 | `GET` | `/ready` | public | [#http-public-ready](#http-public-ready) |
+| `GET` | `/userinfo` | public | [#http-public-userinfo](#http-public-userinfo) |
 
 ## Public API
 
@@ -222,7 +224,7 @@ All endpoints are documented from their route registration site in `api/public/*
 
 **Server** — public (:9000)  
 **Auth** — browser session cookie (managed by `shared.SessionMiddleware`)  
-**Source** — `api/public/oauth/routes.go:252`
+**Source** — `api/public/oauth/routes.go:258`
 
 ---
 
@@ -232,7 +234,7 @@ All endpoints are documented from their route registration site in `api/public/*
 
 **Server** — public (:9000)  
 **Auth** — browser session cookie (managed by `shared.SessionMiddleware`)  
-**Source** — `api/public/oauth/routes.go:253`
+**Source** — `api/public/oauth/routes.go:259`
 
 ---
 
@@ -266,7 +268,7 @@ All endpoints are documented from their route registration site in `api/public/*
 
 **Server** — public (:9000)  
 **Auth** — none (public; request-body parameters identify the caller)  
-**Source** — `api/public/oauth/routes.go:225`
+**Source** — `api/public/oauth/routes.go:231`
 
 ---
 
@@ -276,7 +278,7 @@ All endpoints are documented from their route registration site in `api/public/*
 
 **Server** — public (:9000)  
 **Auth** — none (public; request-body parameters identify the caller)  
-**Source** — `api/public/oauth/routes.go:226`
+**Source** — `api/public/oauth/routes.go:232`
 
 **Response 303** — on success, redirects to the post-login target.
 
@@ -294,7 +296,7 @@ All endpoints are documented from their route registration site in `api/public/*
 
 **Server** — public (:9000)  
 **Auth** — none (public; request-body parameters identify the caller)  
-**Source** — `api/public/oauth/routes.go:227`
+**Source** — `api/public/oauth/routes.go:233`
 
 ---
 
@@ -304,7 +306,7 @@ All endpoints are documented from their route registration site in `api/public/*
 
 **Server** — public (:9000)  
 **Auth** — browser session cookie (managed by `shared.SessionMiddleware`)  
-**Source** — `api/public/oauth/routes.go:161`
+**Source** — `api/public/oauth/routes.go:167`
 
 Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_challenge_method=S256`). Redirects to `/consent` after login.
 
@@ -316,7 +318,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — public (:9000)  
 **Auth** — none (public; request-body parameters identify the caller)  
-**Source** — `api/public/oauth/routes.go:184`
+**Source** — `api/public/oauth/routes.go:190`
 
 **Request** — form-encoded `token`. **Response 200** — RFC 7662 introspection response.
 
@@ -328,7 +330,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — public (:9000)  
 **Auth** — none (public; request-body parameters identify the caller)  
-**Source** — `api/public/oauth/routes.go:144`
+**Source** — `api/public/oauth/routes.go:150`
 
 **Request** — RFC 7591 client metadata JSON. **Response 201** — registered client metadata.
 
@@ -342,7 +344,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — public (:9000)  
 **Auth** — none (public; request-body parameters identify the caller)  
-**Source** — `api/public/oauth/routes.go:176`
+**Source** — `api/public/oauth/routes.go:182`
 
 **Request** — form-encoded `token` + `token_type_hint`. **Response 200** — empty body (RFC 7009).
 
@@ -354,7 +356,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — public (:9000)  
 **Auth** — none (public; request-body parameters identify the caller)  
-**Source** — `api/public/oauth/routes.go:169`
+**Source** — `api/public/oauth/routes.go:175`
 
 **Request** — form-encoded `application/x-www-form-urlencoded`. Grant params depend on `grant_type` (`authorization_code`, `client_credentials`, `refresh_token`, `urn:ietf:params:oauth:grant-type:token-exchange`, `urn:ietf:params:oauth:grant-type:jwt-bearer`). DPoP-bound clients send `DPoP` header; the AS may answer with `WWW-Authenticate: DPoP error="use_dpop_nonce"`.
 
@@ -366,13 +368,25 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 ---
 
+### `GET /oauth/userinfo`
+
+<a id="http-public-oauth-userinfo"></a>
+
+**Server** — public (:9000)  
+**Auth** — `Authorization: Bearer <access_token>`; issuer audience and `oneid:login` scope required  
+**Source** — `api/public/oauth/routes.go:144`
+
+**Response 200** — [`userInfoResponse`](#dto-user-info-response); `Cache-Control: no-store`. **Errors** — 400 `invalid_request` for query-string tokens, 401 `invalid_token`, 403 `insufficient_scope`, 503 `temporarily_unavailable`. Tokens must have the issuer as their sole audience; omit `resource` during login.
+
+---
+
 ### `GET /oidc/callback`
 
 <a id="http-public-oidc-callback"></a>
 
 **Server** — public (:9000)  
 **Auth** — none (public; request-body parameters identify the caller)  
-**Source** — `api/public/oauth/routes.go:291`
+**Source** — `api/public/oauth/routes.go:297`
 
 ---
 
@@ -382,7 +396,7 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 
 **Server** — public (:9000)  
 **Auth** — none (public; request-body parameters identify the caller)  
-**Source** — `api/public/oauth/routes.go:290`
+**Source** — `api/public/oauth/routes.go:296`
 
 ---
 
@@ -395,6 +409,18 @@ Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_cha
 **Source** — `api/public/wellknown/routes.go:70`
 
 **Response 200** — [`healthResponse`](#dto-health-response).
+
+---
+
+### `GET /userinfo`
+
+<a id="http-public-userinfo"></a>
+
+**Server** — public (:9000)  
+**Auth** — `Authorization: Bearer <access_token>`; issuer audience and `oneid:login` scope required  
+**Source** — `api/public/oauth/routes.go:145`
+
+**Response 200** — [`userInfoResponse`](#dto-user-info-response); `Cache-Control: no-store`. **Errors** — 400 `invalid_request` for query-string tokens, 401 `invalid_token`, 403 `insufficient_scope`, 503 `temporarily_unavailable`. Tokens must have the issuer as their sole audience; omit `resource` during login.
 
 ---
 
@@ -1977,7 +2003,7 @@ protectedResourceMetadata is the JSON body for GET /.well-known/oauth-protected-
 
 registerRequest is the JSON body for POST /oauth/register: the RFC 7591 client metadata members this authorization server reads. Members outside this set are accepted and ignored, per RFC 7591 §3.1. (Kept as a wire DTO rather than decoding into the input port type so docsgen, which reads struct tags from this file, can publish a field table for the endpoint.)
 
-**Source** — `api/public/oauth/dto.go:79`
+**Source** — `api/public/oauth/dto.go:88`
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
@@ -1996,7 +2022,7 @@ registerRequest is the JSON body for POST /oauth/register: the RFC 7591 client m
 
 registerResponse is the JSON body returned by POST /oauth/register (RFC 7591 §3.2.1).
 
-**Source** — `api/public/oauth/dto.go:98`
+**Source** — `api/public/oauth/dto.go:107`
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
@@ -2168,7 +2194,7 @@ systemStatusResponse is the JSON body for GET /admin/system/status.
 
 tokenExchangeResponseDTO is the JSON response for RFC 8693 token exchange. It includes issued_token_type which is not present in standard token responses.
 
-**Source** — `api/public/oauth/dto.go:19`
+**Source** — `api/public/oauth/dto.go:28`
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
@@ -2184,7 +2210,7 @@ tokenExchangeResponseDTO is the JSON response for RFC 8693 token exchange. It in
 
 tokenResponseDTO is the JSON structure for POST /oauth/token responses.
 
-**Source** — `api/public/oauth/dto.go:9`
+**Source** — `api/public/oauth/dto.go:18`
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
@@ -2231,6 +2257,21 @@ updateDCRSettingsRequest is the JSON body for PATCH /admin/settings/dcr.
 | --- | --- | --- | --- |
 | `email` | `*string` | no | `omitempty` |
 | `name` | `*string` | no | `omitempty` |
+
+### `userInfoResponse`
+
+<a id="dto-user-info-response"></a>
+
+userInfoResponse is the JSON account profile from GET /oauth/userinfo and GET /userinfo. preferred_username is the account's email login name.
+
+**Source** — `api/public/oauth/dto.go:10`
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `sub` | `string` | yes |  |
+| `name` | `string` | no | `omitempty` |
+| `email` | `string` | no | `omitempty` |
+| `preferred_username` | `string` | no | `omitempty` |
 
 ### `userView`
 

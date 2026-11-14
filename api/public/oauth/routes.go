@@ -111,6 +111,7 @@ type Deps struct {
 	Revoke            RevocationProvider
 	DCR               DCRProvider
 	Introspect        IntrospectionProvider
+	UserInfo          input.UserInfoPort
 	// OAuthConfig gates POST /oauth/introspect at runtime via
 	// IntrospectionEnabled, from the same source as the discovery document's
 	// introspection_endpoint. Optional — when nil the endpoint is always served
@@ -138,6 +139,11 @@ type Deps struct {
 
 // RegisterRoutes registers all OAuth routes on the mux.
 func RegisterRoutes(mux *http.ServeMux, deps Deps, sessMW *shared.SessionMiddleware, obs *observability.Provider) {
+	if deps.UserInfo != nil {
+		h := &userInfoHandler{userinfo: deps.UserInfo, obs: obs}
+		mux.HandleFunc("GET /oauth/userinfo", h.handleUserInfo)
+		mux.HandleFunc("GET /userinfo", h.handleUserInfo)
+	}
 	// DCR endpoint.
 	if deps.DCR != nil {
 		rh := &registerHandler{dcr: deps.DCR, obs: obs}

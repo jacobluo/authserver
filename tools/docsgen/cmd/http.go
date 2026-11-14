@@ -300,6 +300,9 @@ func splitMethodPath(pattern string) (string, string) {
 // surrounding call wraps the handler with a SessionMiddleware-style
 // .Wrap(...), else "none".
 func authForCall(call *ast.CallExpr, path, server string) string {
+	if server == "public" && (path == "/oauth/userinfo" || path == "/userinfo") {
+		return "user-bearer"
+	}
 	if server == "admin" {
 		switch path {
 		case "/metrics":
@@ -620,6 +623,8 @@ func renderRouteSection(r httpRoute, src *srcref.SrcRef, repoRootPath string) st
 
 	b.WriteString("**Auth** — ")
 	switch r.AuthMode {
+	case "user-bearer":
+		b.WriteString("`Authorization: Bearer <access_token>`; issuer audience and `oneid:login` scope required")
 	case "admin-dual", "admin-session":
 		if r.AuthMode == "admin-dual" {
 			b.WriteString("`Authorization: Bearer $AUTHPLANE_ADMIN_API_KEY` or ")
@@ -758,6 +763,8 @@ var routeNotes = map[string]string{
 // routeBodyHints maps "METHOD /path" → a short Markdown paragraph
 // linking the relevant DTO(s). Keep entries terse — the full wire shape
 // lives in the DTO section.
+const userInfoBodyHint = "**Response 200** — {{dto:userInfoResponse}}; `Cache-Control: no-store`. **Errors** — 400 `invalid_request` for query-string tokens, 401 `invalid_token`, 403 `insufficient_scope`, 503 `temporarily_unavailable`. Tokens must have the issuer as their sole audience; omit `resource` during login.\n"
+
 var routeBodyHints = map[string]string{ //nolint:gosec // G101: literal example token in generated docs, not a real credential
 	"POST /oauth/token": "**Request** — form-encoded `application/x-www-form-urlencoded`. " +
 		"Grant params depend on `grant_type` (`authorization_code`, " +
@@ -784,16 +791,16 @@ var routeBodyHints = map[string]string{ //nolint:gosec // G101: literal example 
 	"PATCH /admin/clients/{id}/revoke":       "**Response 200** — JSON {{dto:statusResponse}}.\n",
 	"PATCH /admin/clients/{id}/reactivate":   "**Response 200** — JSON {{dto:statusResponse}}.\n",
 
-	"POST /admin/users":               "**Request** — JSON {{dto:createUserRequest}}. **Response 201** — {{dto:userView}}.\n",
-	"GET /admin/users":                "**Response 200** — JSON array of {{dto:userView}}.\n",
-	"GET /admin/users/{id}":           "**Response 200** — {{dto:userView}}.\n",
-	"PATCH /admin/users/{id}":         "**Request** — JSON {{dto:updateUserRequest}}. **Response 200** — {{dto:userView}}.\n",
+	"POST /admin/users":                "**Request** — JSON {{dto:createUserRequest}}. **Response 201** — {{dto:userView}}.\n",
+	"GET /admin/users":                 "**Response 200** — JSON array of {{dto:userView}}.\n",
+	"GET /admin/users/{id}":            "**Response 200** — {{dto:userView}}.\n",
+	"PATCH /admin/users/{id}":          "**Request** — JSON {{dto:updateUserRequest}}. **Response 200** — {{dto:userView}}.\n",
 	"PATCH /admin/users/{id}/password": "**Request** — JSON {{dto:resetUserPasswordRequest}} with an 8–72 byte password for a local account. **Response 204** — no body. Existing sessions and tokens remain valid.\n",
-	"DELETE /admin/users/{id}":        "**Response 204** — no body.\n",
-	"GET /admin/users/{id}/tokens":    "**Response 200** — `{ tokens: [...] }` (issuance summary; see `api/admin/handlers.go`).\n",
-	"DELETE /admin/users/{id}/tokens": "**Response 200** — JSON `{ revoked: N }`.\n",
-	"PATCH /admin/users/{id}/disable": "**Response 200** — JSON {{dto:statusResponse}}.\n",
-	"PATCH /admin/users/{id}/enable":  "**Response 200** — JSON {{dto:statusResponse}}.\n",
+	"DELETE /admin/users/{id}":         "**Response 204** — no body.\n",
+	"GET /admin/users/{id}/tokens":     "**Response 200** — `{ tokens: [...] }` (issuance summary; see `api/admin/handlers.go`).\n",
+	"DELETE /admin/users/{id}/tokens":  "**Response 200** — JSON `{ revoked: N }`.\n",
+	"PATCH /admin/users/{id}/disable":  "**Response 200** — JSON {{dto:statusResponse}}.\n",
+	"PATCH /admin/users/{id}/enable":   "**Response 200** — JSON {{dto:statusResponse}}.\n",
 
 	"POST /admin/resources":        "**Request** — JSON {{dto:createResourceRequest}}. **Response 201** — {{dto:ResourceView}}.\n",
 	"GET /admin/resources":         "**Response 200** — JSON array of {{dto:ResourceView}}.\n",
@@ -840,6 +847,8 @@ var routeBodyHints = map[string]string{ //nolint:gosec // G101: literal example 
 	"POST /oauth/register":   "**Request** — RFC 7591 client metadata JSON. **Response 201** — registered client metadata.\n",
 	"POST /oauth/revoke":     "**Request** — form-encoded `token` + `token_type_hint`. **Response 200** — empty body (RFC 7009).\n",
 	"POST /oauth/introspect": "**Request** — form-encoded `token`. **Response 200** — RFC 7662 introspection response.\n",
+	"GET /oauth/userinfo":    userInfoBodyHint,
+	"GET /userinfo":          userInfoBodyHint,
 	"GET /oauth/authorize":   "Query-string parameters per RFC 6749 §4.1.1 + PKCE (`code_challenge`, `code_challenge_method=S256`). Redirects to `/consent` after login.\n",
 
 	"GET /.well-known/jwks.json":                  "**Response 200** — JWKS document (public keys only). Cache-Control `max-age=300`.\n",

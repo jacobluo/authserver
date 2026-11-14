@@ -106,7 +106,7 @@ func relativePageURL(u *url.URL) string {
 
 // The keys are the existing English presentation strings, keeping the page
 // templates and handler error contracts single-sourced and easy to merge.
-var chinesePageText = map[string]string{
+var chinesePageText = map[string]string{ //nolint:gosec // G101: translated UI labels, not credentials.
 	"Sign In": "登录", "Welcome back": "欢迎回来", "Sign in to your account to continue": "登录账户以继续",
 	"Continue with": "使用", "or": "或", "Email address": "电子邮箱", "Password": "密码",
 	"Enter your password": "请输入密码", "Sign in": "登录", "Secured by Authplane": "由 Authplane 提供安全保护",

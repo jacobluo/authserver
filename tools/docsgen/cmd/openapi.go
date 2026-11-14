@@ -390,6 +390,8 @@ func buildOperation(r httpRoute, dtoByName map[string]httpDTO, refs map[string]b
 
 	// Security per auth mode (matches the Markdown reference's "Auth — …" line).
 	switch r.AuthMode {
+	case "user-bearer":
+		op.Security = []map[string][]string{{"OAuth2Bearer": {}}}
 	case "admin-dual", "admin-session":
 		cookie := map[string][]string{"AdminSessionCookie": {}}
 		if r.Method != "GET" && r.Method != "HEAD" && r.Method != "OPTIONS" {

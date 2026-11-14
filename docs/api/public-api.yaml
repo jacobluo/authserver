@@ -22,6 +22,7 @@ tags:
   - name: oauth
   - name: oidc
   - name: ready
+  - name: userinfo
 paths:
   /.well-known/jwks.json:
     get:
@@ -298,6 +299,29 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/OAuthErrorResponse'
+  /oauth/userinfo:
+    get:
+      operationId: http-public-oauth-userinfo
+      summary: '`GET /oauth/userinfo`'
+      tags:
+        - oauth
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserInfoResponse'
+        "400":
+          description: 'Bad Request (`error` values: `invalid_request`)'
+        "401":
+          description: 'Unauthorized (`error` values: `invalid_token`)'
+        "403":
+          description: 'Forbidden (`error` values: `insufficient_scope`)'
+        "503":
+          description: 'Status 503 (`error` values: `temporarily_unavailable`)'
+      security:
+        - OAuth2Bearer: []
   /oidc/callback:
     get:
       operationId: http-public-oidc-callback
@@ -329,6 +353,29 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HealthResponse'
+  /userinfo:
+    get:
+      operationId: http-public-userinfo
+      summary: '`GET /userinfo`'
+      tags:
+        - userinfo
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserInfoResponse'
+        "400":
+          description: 'Bad Request (`error` values: `invalid_request`)'
+        "401":
+          description: 'Unauthorized (`error` values: `invalid_token`)'
+        "403":
+          description: 'Forbidden (`error` values: `insufficient_scope`)'
+        "503":
+          description: 'Status 503 (`error` values: `temporarily_unavailable`)'
+      security:
+        - OAuth2Bearer: []
 components:
   schemas:
     HealthResponse:
@@ -413,6 +460,20 @@ components:
         - expires_in
         - token_type
       description: tokenResponseDTO is the JSON structure for POST /oauth/token responses.
+    UserInfoResponse:
+      type: object
+      properties:
+        email:
+          type: string
+        name:
+          type: string
+        preferred_username:
+          type: string
+        sub:
+          type: string
+      required:
+        - sub
+      description: userInfoResponse is the JSON account profile from GET /oauth/userinfo and GET /userinfo. preferred_username is the account's email login name.
   securitySchemes:
     OAuth2Bearer:
       type: http

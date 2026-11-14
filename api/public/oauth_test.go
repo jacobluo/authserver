@@ -124,6 +124,7 @@ func newOAuthTestServer(t *testing.T) *oauthTestEnv {
 		Consent:               consentSvc,
 		Token:                 tokenSvc,
 		Revoke:                revokeSvc,
+		UserInfo:              services.NewUserInfoService(jwksSvc, stores.Revocation, stores.Token, stores.MachineToken, stores.Client, stores.User, staticIssuerForTest("https://auth.example.com")),
 		SessionCookie:         apipublic.SessionCookie{Name: "authserver_session"},
 	}, obs)
 

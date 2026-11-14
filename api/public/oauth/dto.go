@@ -5,6 +5,15 @@ import (
 	"github.com/authplane/authserver/internal/ports/input"
 )
 
+// userInfoResponse is the JSON account profile from GET /oauth/userinfo and
+// GET /userinfo. preferred_username is the account's email login name.
+type userInfoResponse struct {
+	Subject           string `json:"sub"`
+	Name              string `json:"name,omitempty"`
+	Email             string `json:"email,omitempty"`
+	PreferredUsername string `json:"preferred_username,omitempty"`
+}
+
 // tokenResponseDTO is the JSON structure for POST /oauth/token responses.
 type tokenResponseDTO struct {
 	AccessToken  string `json:"access_token"`

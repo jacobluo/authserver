@@ -53,6 +53,7 @@ type Deps struct {
 	JWTBearer         oauth.JWTBearerProvider
 	Revoke            oauth.RevocationProvider
 	Introspect        oauth.IntrospectionProvider
+	UserInfo          input.UserInfoPort
 	// OAuthConfig gates POST /oauth/introspect at runtime (IntrospectionEnabled)
 	// from the same source as the discovery document. Optional.
 	OAuthConfig output.OAuthConfigProvider
@@ -297,6 +298,7 @@ func NewServer(ctx context.Context, cfg config.ServerConfig, deps Deps, obs *obs
 		Revoke:            deps.Revoke,
 		DCR:               deps.DCR,
 		Introspect:        deps.Introspect,
+		UserInfo:          deps.UserInfo,
 		OAuthConfig:       deps.OAuthConfig,
 		IssuerProvider:    deps.IssuerProvider,
 	}

@@ -482,6 +482,7 @@ func runServe() error {
 	// Lets a resource server introspect a token minted for it. Without this
 	// the ownership check admits only the token's issuing client.
 	introspectSvc.WithResourceRegistry(resourceRegistry)
+	userInfoSvc := services.NewUserInfoService(jwksSvc, ds.Revocation(), ds.Token(), ds.MachineToken(), ds.Client(), ds.User(), issuerProvider)
 
 	// 11c. Setup client credentials service (if enabled)
 	ccConfigProvider := static.NewClientCredentialsConfigProvider(output.ClientCredentialsConfig{
@@ -765,6 +766,7 @@ func runServe() error {
 		Token:         tokenSvc,
 		Revoke:        revokeSvc,
 		Introspect:    introspectSvc,
+		UserInfo:      userInfoSvc,
 		OAuthConfig:   oauthConfigProvider,
 		Health:        ds,
 		OIDC:          oidcFacade,

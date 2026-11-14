@@ -10,7 +10,7 @@ import (
 
 func TestWriteErrorPageDefaultsToChineseAndEscapesMessage(t *testing.T) {
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/oauth/authorize", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/oauth/authorize", nil)
 	WriteErrorPage(rec, req, http.StatusBadRequest, "Invalid Client", `The client_id is not recognized. <script>alert(1)</script>`)
 	if rec.Code != http.StatusBadRequest || !strings.HasPrefix(rec.Header().Get("Content-Type"), "text/html") {
 		t.Fatalf("status/content type changed: %d %q", rec.Code, rec.Header().Get("Content-Type"))
@@ -26,7 +26,7 @@ func TestWriteErrorPageDefaultsToChineseAndEscapesMessage(t *testing.T) {
 
 func TestWriteErrorPageEnglishChoicePersistsWithoutChangingOAuthJSON(t *testing.T) {
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/oauth/authorize?client_id=abc&lang=en", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/oauth/authorize?client_id=abc&lang=en", nil)
 	WriteErrorPage(rec, req, http.StatusBadRequest, "Invalid Client", "The client_id is not recognized.")
 	if !strings.Contains(rec.Body.String(), `<html lang="en">`) || !strings.Contains(rec.Body.String(), "Invalid Client") {
 		t.Fatalf("English choice not reflected in page: %s", rec.Body.String())
@@ -45,7 +45,7 @@ func TestWriteErrorPageEnglishChoicePersistsWithoutChangingOAuthJSON(t *testing.
 	}
 
 	// The preference is read on a later page, but protocol JSON stays English.
-	later := httptest.NewRequest(http.MethodGet, "/oauth/authorize", nil)
+	later := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/oauth/authorize", nil)
 	later.AddCookie(preference)
 	laterRec := httptest.NewRecorder()
 	WriteErrorPage(laterRec, later, http.StatusBadRequest, "Invalid Client", "The client_id is not recognized.")

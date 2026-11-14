@@ -109,6 +109,26 @@ func (s *TokenStore) GetFamily(ctx context.Context, id string) (*token.Family, e
 	return f, nil
 }
 
+// GetFamilyByAccessTokenJTI resolves a direct login token's grant in one query.
+func (s *TokenStore) GetFamilyByAccessTokenJTI(ctx context.Context, jti string) (*token.Family, error) {
+	ctx, span := s.tracer.Start(ctx, "SQLite.TokenGetFamilyByAccessTokenJTI")
+	defer span.End()
+	start := time.Now()
+	row := dbOrTx(ctx, s.db).QueryRowContext(ctx,
+		`SELECT `+familyColumns+` FROM token_families WHERE id = (SELECT family_id FROM access_token_jtis WHERE jti = ?)`, jti)
+	f, err := scanFamily(row)
+	s.metrics.DBOperationDuration.Record(ctx, time.Since(start).Seconds(), dbAttrs("token_get_family_by_access_jti"))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, domain.ErrInvalidGrant
+	}
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, fmt.Errorf("get token family by access JTI: %w", err)
+	}
+	return f, nil
+}
+
 // GetFamilyByAuthSessionID implements output.TokenStore.
 func (s *TokenStore) GetFamilyByAuthSessionID(ctx context.Context, authSessionID string) (*token.Family, error) {
 	ctx, span := s.tracer.Start(ctx, "SQLite.TokenGetFamilyByAuthSessionID")
