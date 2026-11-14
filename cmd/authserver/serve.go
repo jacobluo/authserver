@@ -454,8 +454,6 @@ func runServe() error {
 		ds.Revocation(), resourceLister,
 	)
 	tokenSvc.WithTokenTransactions(ds.Transaction())
-	authzSvc.WithOAuth2LoginClients(cfg.OAuth.ConfidentialLoginClientsWithoutPKCE)
-	tokenSvc.WithOAuth2LoginClients(cfg.OAuth.ConfidentialLoginClientsWithoutPKCE)
 	// Wire the unified ResourceRegistry so the auth-code and refresh-token
 	// grants persist their issuances audit row (the FK target resources.id
 	// can only be resolved through the registry). Without this the admin

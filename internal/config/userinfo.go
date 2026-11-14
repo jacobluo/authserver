@@ -24,14 +24,3 @@ func (c UserInfoConfig) validate() []error {
 	}
 	return nil
 }
-
-func (c OAuthConfig) validateLoginClients() []error {
-	seen := make(map[string]bool, len(c.ConfidentialLoginClientsWithoutPKCE))
-	for _, id := range c.ConfidentialLoginClientsWithoutPKCE {
-		if id == "" || len(id) > 256 || strings.TrimSpace(id) != id || strings.ContainsFunc(id, unicode.IsControl) || seen[id] {
-			return []error{errors.New("oauth.confidential_login_clients_without_pkce requires distinct nonempty client IDs without surrounding whitespace or control characters")}
-		}
-		seen[id] = true
-	}
-	return nil
-}

@@ -111,7 +111,7 @@ Authplane implements the MCP Authorization specification (2026-07-28) and the OA
 | Standard | What it provides |
 |---|---|
 | **MCP Authorization 2026-07-28** | The contract MCP clients and servers expect: discovery endpoints, CIMD and dynamic client registration, audience-bound tokens, `iss`-stamped authorization responses. The reason your existing MCP tooling can find and talk to authserver without custom adapters. |
-| **OAuth 2.1** | The base authorization flow — authorize endpoint, token endpoint, refresh tokens, scopes. PKCE-S256 is mandatory; the older insecure flows aren't supported. |
+| **OAuth 2.1** | The base authorization flow — authorize endpoint, token endpoint, refresh tokens, scopes. PKCE-S256 is mandatory for public clients. Confidential clients using Basic/Form Post may use OAuth 2.0 authorization-code compatibility without PKCE; see [the integration guide](docs/guides/integrate/oauth2-userinfo.md). Implicit and password grants are not supported. |
 | **PKCE (RFC 7636)** | Prevents stolen authorization codes from being redeemed. Critical for public clients (CLIs, desktop apps, mobile). |
 | **DPoP (RFC 9449)** | Binds tokens to a client-held key. A leaked token can't be replayed from another machine. |
 | **Resource Indicators (RFC 8707)** | Audience-binds every token to a specific resource URI. An access token for one MCP server can't be replayed against another. |

@@ -27,20 +27,19 @@ import (
 
 // TokenService implements input.TokenPort.
 type TokenService struct {
-	oauth2LoginClients []string
-	sessions           output.SessionStore
-	tokens             output.TokenStore
-	clients            output.ClientStore
-	users              output.UserStore
-	jwks               JWKSSigningKeyProvider
-	mintIssuer         *MintIssuer            // signs Mint access tokens + writes the issuances audit row.
-	revocation         output.RevocationStore // optional, for JTI tracking (introspection support)
-	audit              AuditRecorder
-	tokenConfig        output.TokenConfigProvider // resolves access/refresh TTLs per request
-	resources          ResourceLister             // resource catalog (kept for ResourceLister.List() walks)
-	logger             *slog.Logger
-	tracer             trace.Tracer
-	metrics            *observability.Metrics
+	sessions    output.SessionStore
+	tokens      output.TokenStore
+	clients     output.ClientStore
+	users       output.UserStore
+	jwks        JWKSSigningKeyProvider
+	mintIssuer  *MintIssuer            // signs Mint access tokens + writes the issuances audit row.
+	revocation  output.RevocationStore // optional, for JTI tracking (introspection support)
+	audit       AuditRecorder
+	tokenConfig output.TokenConfigProvider // resolves access/refresh TTLs per request
+	resources   ResourceLister             // resource catalog (kept for ResourceLister.List() walks)
+	logger      *slog.Logger
+	tracer      trace.Tracer
+	metrics     *observability.Metrics
 
 	// DPoP support (RFC 9449) — optional. When dpopStore is nil, DPoP is disabled.
 	dpopStore  output.DPoPNonceStore
@@ -219,9 +218,9 @@ func (s *TokenService) exchangeCode(ctx context.Context, req input.ExchangeCodeR
 
 	// 6. Verify PKCE.
 	pkceErr := crypto.VerifyS256(req.CodeVerifier, sess.CodeChallenge)
-	if sess.CodeChallenge == "" && sess.CodeChallengeMethod == "" && req.CodeVerifier == "" && req.Resource == "" {
+	if sess.CodeChallenge == "" && sess.CodeChallengeMethod == "" && req.CodeVerifier == "" {
 		c, lookupErr := s.clients.GetByID(ctx, sess.ClientID)
-		if lookupErr == nil && allowsOAuth2Login(c, s.oauth2LoginClients, sess.RedirectURI, sess.Scope, sess.Resource) {
+		if lookupErr == nil && allowsAuthorizationWithoutPKCE(c) && c.HasRedirectURI(sess.RedirectURI) {
 			pkceErr = nil
 		}
 	}
@@ -1136,8 +1135,8 @@ func (s *TokenService) auditReuse(ctx context.Context, action audit.Action, deta
 //
 // The detection is recorded unconditionally. Revocation is gated on the
 // replayer proving they could plausibly have been the original client: normally
-// this is the PKCE verifier. A deliberately allowlisted confidential login
-// client instead proves its secret when its original session omitted PKCE.
+// this is the PKCE verifier. A confidential client instead proves its
+// registered secret when its original session omitted PKCE.
 // A replayer without that proof could never have redeemed this code, and the
 // same is true of a caller presenting
 // a different client_id than the one the session was issued to. Revoking on
@@ -1157,7 +1156,7 @@ func (s *TokenService) handleCodeReuse(ctx context.Context, span trace.Span, ses
 	// trigger family revocation; a captured spent code alone must not do so.
 	if !verifierOK && clientOK && sess.CodeChallenge == "" && sess.CodeChallengeMethod == "" && verifier == "" {
 		c, err := s.clients.GetByID(ctx, clientID)
-		verifierOK = err == nil && allowsOAuth2Login(c, s.oauth2LoginClients, sess.RedirectURI, sess.Scope, sess.Resource) && s.authenticateClient(ctx, span, clientID, clientSecret) == nil
+		verifierOK = err == nil && allowsAuthorizationWithoutPKCE(c) && c.HasRedirectURI(sess.RedirectURI) && s.authenticateClient(ctx, span, clientID, clientSecret) == nil
 	}
 	credentialed := verifierOK && clientOK
 	label := "invalid"

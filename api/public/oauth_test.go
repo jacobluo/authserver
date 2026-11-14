@@ -2679,3 +2679,52 @@ func extractCSRFToken(body string) string {
 	}
 	return rest[:end]
 }
+
+// Reject ambiguous token parameters before consuming the authorization code.
+func TestTokenEndpoint_DuplicateVerifierDoesNotConsumeCode(t *testing.T) {
+	for _, challenged := range []bool{false, true} {
+		t.Run(map[bool]string{false: "unchallenged", true: "challenged"}[challenged], func(t *testing.T) {
+			env := newOAuthTestServer(t)
+			c, secret := env.createClient(t, false)
+			c.TokenEndpointAuthMethod = "client_secret_post"
+			if err := env.stores.Stores.Client.Update(t.Context(), c); err != nil {
+				t.Fatal(err)
+			}
+			verifier, code := "", crypto.GenerateAuthCode()
+			now := time.Now().UTC()
+			sess := &session.AuthSession{ID: crypto.GenerateRandomString(16), ClientID: c.ID, UserID: "user-42", RedirectURI: c.RedirectURIs[0], Scope: "tools/query", Resource: "https://mcp.example.com", CodeHash: crypto.HashSHA256(code), ExpiresAt: now.Add(session.AuthCodeTTL), CreatedAt: now}
+			if challenged {
+				verifier = crypto.GenerateVerifier()
+				sess.CodeChallenge, sess.CodeChallengeMethod = crypto.ComputeS256Challenge(verifier), "S256"
+			}
+			if err := env.stores.Stores.Session.Create(t.Context(), sess); err != nil {
+				t.Fatal(err)
+			}
+			form := url.Values{"grant_type": {"authorization_code"}, "code": {code}, "redirect_uri": {sess.RedirectURI}, "client_id": {c.ID}, "client_secret": {secret}, "code_verifier": {verifier, "garbage"}}
+			resp, err := http.PostForm(env.ts.URL+"/oauth/token", form)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var result struct {
+				Error string `json:"error"`
+			}
+			decodeErr := json.NewDecoder(resp.Body).Decode(&result)
+			resp.Body.Close()
+			if decodeErr != nil {
+				t.Fatal(decodeErr)
+			}
+			if resp.StatusCode != 400 || result.Error != "invalid_request" {
+				t.Fatalf("ambiguous verifier status=%d error=%q", resp.StatusCode, result.Error)
+			}
+			form.Set("code_verifier", verifier)
+			resp, err = http.PostForm(env.ts.URL+"/oauth/token", form)
+			if err != nil {
+				t.Fatal(err)
+			}
+			resp.Body.Close()
+			if resp.StatusCode != 200 {
+				t.Fatalf("invalid request consumed code: valid retry status=%d", resp.StatusCode)
+			}
+		})
+	}
+}

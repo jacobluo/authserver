@@ -4,6 +4,8 @@ authserver implements the following standards. Each section lists the RFC, the r
 
 > **A note on OAuth 2.1.** OAuth 2.1 is currently an active IETF Internet-Draft ([draft-ietf-oauth-v2-1](https://datatracker.ietf.org/doc/draft-ietf-oauth-v2-1/), `-15` as of March 2026), not a finalized RFC. Where this document refers to "OAuth 2.1 security requirements" or "OAuth 2.1 guidance," it means the consensus in that draft (PKCE-mandatory, implicit and ROPC removed, refresh-rotation with reuse detection). We implement against the draft because the MCP Authorization specification itself targets OAuth 2.1.
 
+> **Fork compatibility policy:** Confidential authorization-code clients using Basic/Form Post may omit PKCE. These requests are OAuth 2.0 compatibility, not strict OAuth 2.1 compliance. Public clients still require S256, and supplied PKCE is always enforced. See [OAuth2 integration](../guides/integrate/oauth2-userinfo.md).
+
 **Design philosophy**: authserver implements the subset of each RFC needed for MCP authorization — not less, not more. Where an RFC offers multiple approaches (e.g., token formats, client auth methods), we pick the secure-by-default option and document deviations explicitly. Legacy grant types (implicit, ROPC) are intentionally omitted per OAuth 2.1 security guidance. Every deviation is tied to an ADR (Architecture Decision Record) so you can trace the reasoning.
 
 ## Core OAuth
@@ -48,7 +50,7 @@ Both are conformant. §3.3 requires the authorization server to "either process 
 
 ### RFC 9700 — OAuth 2.0 Security Best Current Practice
 
-**Coverage**: PKCE required, exact redirect URI matching, refresh token rotation, no implicit grant.
+**Coverage**: PKCE required for public clients and enforced whenever supplied; confidential clients may omit it for OAuth 2.0 compatibility. Redirect URI validation, refresh token rotation and absence of the implicit grant remain enforced.
 
 ## Token Format
 

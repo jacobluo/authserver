@@ -34,18 +34,3 @@ func TestValidateUserInfoPreferredUsernames(t *testing.T) {
 		}
 	}
 }
-
-func TestValidateConfidentialLoginClients(t *testing.T) {
-	for _, ids := range [][]string{{""}, {" client"}, {"client\n"}, {"client", "client"}, {strings.Repeat("x", 257)}} {
-		cfg := DefaultConfig()
-		cfg.OAuth.ConfidentialLoginClientsWithoutPKCE = ids
-		if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "oauth.confidential_login_clients_without_pkce") {
-			t.Fatalf("invalid allowlist accepted: %v err=%v", ids, err)
-		}
-	}
-	cfg := DefaultConfig()
-	cfg.OAuth.ConfidentialLoginClientsWithoutPKCE = []string{"approved-client"}
-	if err := cfg.Validate(); err != nil {
-		t.Fatal(err)
-	}
-}

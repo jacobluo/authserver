@@ -6,41 +6,39 @@ import (
 	"github.com/authplane/authserver/internal/domain/client"
 )
 
-func TestAllowsOAuth2Login(t *testing.T) {
-	for _, mode := range []string{"allowed", "not listed", "public", "DCR", "no auth", "suspended", "different callback", "http callback", "other scope", "extra scope", "MCP resource", "not code"} {
-		t.Run(mode, func(t *testing.T) {
-			c := &client.Client{ID: "oneid-client", SecretHash: "present", Status: client.StatusActive, RegistrationSource: client.SourceAdmin, GrantTypes: []string{"authorization_code"}, RedirectURIs: []string{"https://idp.example.com/callback"}, TokenEndpointAuthMethod: "client_secret_post"}
-			ids := []string{c.ID}
-			redirect := "https://idp.example.com/callback"
-			scope := "oneid:login"
-			resource := ""
-			switch mode {
-			case "not listed":
-				ids = []string{"other"}
-			case "public":
-				c.SecretHash = ""
+func TestAllowsAuthorizationWithoutPKCE(t *testing.T) {
+	for _, tc := range []struct {
+		mode string
+		want bool
+	}{
+		{"basic", true}, {"post", true}, {"DCR", true}, {"CIMD", true},
+		{"nil", false}, {"public", false}, {"none", false}, {"unknown method", false},
+		{"suspended", false}, {"not code", false},
+	} {
+		t.Run(tc.mode, func(t *testing.T) {
+			c := &client.Client{ID: "any-client", SecretHash: "present", Status: client.StatusActive, RegistrationSource: client.SourceAdmin, GrantTypes: []string{"authorization_code"}, TokenEndpointAuthMethod: "client_secret_basic"}
+			switch tc.mode {
+			case "post":
+				c.TokenEndpointAuthMethod = "client_secret_post"
 			case "DCR":
 				c.RegistrationSource = client.SourceDCR
-			case "no auth":
+			case "CIMD":
+				c.RegistrationSource = client.SourceCIMD
+			case "nil":
+				c = nil
+			case "public":
+				c.SecretHash = ""
+			case "none":
 				c.TokenEndpointAuthMethod = "none"
+			case "unknown method":
+				c.TokenEndpointAuthMethod = "unsupported"
 			case "suspended":
 				c.Status = client.StatusSuspended
-			case "different callback":
-				redirect += "?other=1"
-			case "http callback":
-				redirect = "http://idp.example.com/callback"
-				c.RedirectURIs = []string{redirect}
-			case "other scope":
-				scope = "mcp:tools"
-			case "extra scope":
-				scope = "oneid:login mcp:tools"
-			case "MCP resource":
-				resource = "https://mcp.example.com"
 			case "not code":
 				c.GrantTypes = []string{"client_credentials"}
 			}
-			if got := allowsOAuth2Login(c, ids, redirect, scope, resource); got != (mode == "allowed") {
-				t.Fatalf("allowed=%v for %s", got, mode)
+			if got := allowsAuthorizationWithoutPKCE(c); got != tc.want {
+				t.Fatalf("allowed=%v, want %v", got, tc.want)
 			}
 		})
 	}

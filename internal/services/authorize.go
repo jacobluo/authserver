@@ -25,16 +25,15 @@ var _ input.AuthorizePort = (*AuthorizeService)(nil)
 
 // AuthorizeService implements the authorization code flow.
 type AuthorizeService struct {
-	oauth2LoginClients []string
-	clients            output.ClientStore
-	sessions           output.SessionStore
-	consentGrants      output.ConsentGrantStore
-	cimd               input.CIMDPort // nil when CIMD is disabled
-	registry           *ResourceRegistry
-	oauthConfig        output.OAuthConfigProvider
-	logger             *slog.Logger
-	tracer             trace.Tracer
-	metrics            *observability.Metrics
+	clients       output.ClientStore
+	sessions      output.SessionStore
+	consentGrants output.ConsentGrantStore
+	cimd          input.CIMDPort // nil when CIMD is disabled
+	registry      *ResourceRegistry
+	oauthConfig   output.OAuthConfigProvider
+	logger        *slog.Logger
+	tracer        trace.Tracer
+	metrics       *observability.Metrics
 }
 
 // ResourceInfo holds resource configuration needed by the authorize and token services.
@@ -111,7 +110,7 @@ func (s *AuthorizeService) StartAuthorization(ctx context.Context, req input.Aut
 	}
 
 	if req.CodeChallenge == "" {
-		if req.CodeChallengeMethod != "" || !allowsOAuth2Login(c, s.oauth2LoginClients, req.RedirectURI, req.Scope, req.Resource) {
+		if req.CodeChallengeMethod != "" || !allowsAuthorizationWithoutPKCE(c) {
 			err = fmt.Errorf("%w: code_challenge is required", domain.ErrInvalidPKCE)
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())

@@ -196,6 +196,10 @@ func (h *oauthHandler) handleToken(w http.ResponseWriter, r *http.Request) {
 		shared.WriteOAuthError(w, http.StatusBadRequest, "invalid_request", "invalid form body")
 		return
 	}
+	if len(r.Form["grant_type"]) > 1 {
+		shared.WriteOAuthError(w, http.StatusBadRequest, "invalid_request", "duplicate grant_type is not supported")
+		return
+	}
 
 	grantType := r.FormValue("grant_type")
 
@@ -217,6 +221,12 @@ func (h *oauthHandler) handleToken(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *oauthHandler) handleAuthCodeExchange(w http.ResponseWriter, r *http.Request) {
+	for _, key := range []string{"code", "redirect_uri", "resource", "client_id", "client_secret", "code_verifier"} {
+		if len(r.Form[key]) > 1 {
+			shared.WriteOAuthError(w, http.StatusBadRequest, "invalid_request", "duplicate authorization-code parameters are not supported")
+			return
+		}
+	}
 	if h.token == nil {
 		shared.WriteOAuthError(w, http.StatusInternalServerError, "server_error", "token service not configured")
 		return

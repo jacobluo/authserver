@@ -53,7 +53,6 @@ type AgentsConfig struct {
 
 // OAuthConfig controls OAuth authorization server behavior.
 type OAuthConfig struct {
-	ConfidentialLoginClientsWithoutPKCE []string `yaml:"confidential_login_clients_without_pkce"` // explicit admin-created confidential client IDs; only oneid:login without resource and exact HTTPS callback may omit PKCE
 	// RequireScope rejects authorize requests missing the scope parameter with
 	// invalid_scope. When false, missing scope is processed using a pre-defined
 	// default value: all scopes registered for the resource.

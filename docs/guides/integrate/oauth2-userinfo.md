@@ -41,13 +41,9 @@ Responses include `Cache-Control: no-store`. Invalid/missing Bearer tokens retur
 | Scope | `oneid:login` |
 | Authorization flow | Authorization code; S256 remains the default |
 
-Keep the previously registered callback URI unchanged. The dedicated client credentials are stored outside the repository. Actual OneID requests may omit PKCE. To support such a source, explicitly allow its confidential client ID using the YAML-only `oauth.confidential_login_clients_without_pkce` configuration. This exception requires an active admin-created client with a secret and Basic/Form Post authentication, an exact registered HTTPS redirect, no resource, and exactly `oneid:login`. Public/DCR clients and MCP grants still require PKCE. If any challenge is supplied, S256 verification remains mandatory; partial or ambiguous PKCE requests are rejected. Client credentials must come from Basic authentication or the POST body, never the URL query.
+Keep the previously registered callback URI unchanged. The dedicated client credentials are stored outside the repository. Confidential authorization-code clients using Basic or Form Post authentication may omit PKCE without an allowlist. This rule applies independently of client ID, registration source, scope and resource; public clients still require S256 PKCE. Token exchange always validates the registered client secret, exact session callback, code expiry and one-time use, active user and client, and authorized resource. Supplying PKCE commits the request to S256 verification: partial, malformed or ambiguous parameters and a missing/wrong verifier are rejected. Client credentials must come from Basic authentication or the POST body, never the URL query.
 
-```yaml
-oauth:
-  confidential_login_clients_without_pkce:
-    - approved-confidential-client-id
-```
+The former `oauth.confidential_login_clients_without_pkce` setting has been removed. Remove that obsolete entry when upgrading; the separate `userinfo.preferred_usernames` mapping remains supported. Requests omitting PKCE use OAuth 2.0 compatibility and do not claim strict OAuth 2.1 authorization-code compliance. PKCE remains recommended for confidential clients when the integration supports it.
 
 Prefer a preprovisioned stable `sub` mapping for OneID account association. Automatic email matching is appropriate only when the identity source verifies email ownership and controls subsequent email changes. AuthPlane's federated-login path does not check `email_verified`, so an arbitrary upstream email is not proof of ownership. A one-time manual comparison does not establish continuing trust after future email changes. The separate jump-wb bridge's `preferred_username` mapping is not automatically reused. See [OneID association rules](https://identity.tencent.com/docs/guides/IDPconfig/standard/mapping/).
 

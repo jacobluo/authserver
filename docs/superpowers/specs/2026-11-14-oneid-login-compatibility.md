@@ -1,5 +1,7 @@
 # OneID OAuth2 login compatibility
 
+Superseded by [general confidential-client OAuth2 compatibility](2026-11-14-confidential-client-pkce-design.md). The following records the earlier scoped release.
+
 OneID's real authorization requests on 2026-11-14 omitted both PKCE fields and were refused before login. A comparison request carrying S256 reached the login page. The user approved an exception only for the existing OneID confidential client; all other clients keep mandatory PKCE.
 
 Add a boot-time `oauth.confidential_login_clients_without_pkce` allowlist. An exception is valid only for active, admin-registered clients with a secret and basic/post secret authentication, the authorization-code grant, an exact HTTPS callback, no resource parameter, and exactly the `oneid:login` scope. Both authorization and code exchange enforce the same boundary. Existing challenges still require the verifier; partial PKCE is refused. Code exchange still authenticates the secret, checks the callback, expiry and user, and atomically consumes the code. An authenticated legacy code replay revokes its grant; a replay without the correct secret cannot trigger revocation.

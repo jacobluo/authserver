@@ -188,7 +188,6 @@ func TestOAuth2AuthorizeRejectsAmbiguousParameters(t *testing.T) {
 	if err := e.stores.Stores.Client.Update(t.Context(), c); err != nil {
 		t.Fatal(err)
 	}
-	e.authzSvc.WithOAuth2LoginClients([]string{c.ID})
 	q := url.Values{"client_id": {c.ID}, "redirect_uri": {c.RedirectURIs[0]}, "response_type": {"code"}, "scope": {"oneid:login"}, "state": {"ambiguous"}}
 	hc := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	for _, suffix := range []string{"&code_challenge=&code_challenge=present&code_challenge_method=&code_challenge_method=S256", "&resource=&resource=https%3A%2F%2Fmcp.example.com", "&code_challenge=%GG"} {
@@ -374,7 +373,7 @@ func TestUserInfo_FailsClosedOnStorageErrors(t *testing.T) {
 // including browser login, consent, code exchange, refresh and revocation.
 func TestUserInfo_AuthorizationCodeFlow(t *testing.T) {
 	t.Run("PKCE", func(t *testing.T) { testUserInfoCodeFlow(t, false) })
-	t.Run("allowlisted OAuth2", func(t *testing.T) { testUserInfoCodeFlow(t, true) })
+	t.Run("confidential OAuth2", func(t *testing.T) { testUserInfoCodeFlow(t, true) })
 }
 
 func testUserInfoCodeFlow(t *testing.T, withoutPKCE bool) {
@@ -382,11 +381,6 @@ func testUserInfoCodeFlow(t *testing.T, withoutPKCE bool) {
 	c, secret := e.createClient(t, false)
 	c.TokenEndpointAuthMethod = "client_secret_post"
 	c.GrantTypes = []string{"authorization_code", "refresh_token"}
-	if withoutPKCE {
-		c.RegistrationSource = client.SourceAdmin
-		e.authzSvc.WithOAuth2LoginClients([]string{c.ID})
-		e.tokenSvc.WithOAuth2LoginClients([]string{c.ID})
-	}
 	if err := e.stores.Stores.Client.Update(t.Context(), c); err != nil {
 		t.Fatal(err)
 	}

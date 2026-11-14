@@ -204,6 +204,32 @@ func TestAuthorize_MissingPKCE(t *testing.T) {
 	}
 }
 
+func TestAuthorize_ConfidentialClientWithoutPKCE(t *testing.T) {
+	for _, source := range []client.RegistrationSource{client.SourceAdmin, client.SourceDCR} {
+		for _, method := range []string{"client_secret_basic", "client_secret_post"} {
+			t.Run(string(source)+"/"+method, func(t *testing.T) {
+				svc, h := newAuthorizeService(t)
+				c := createTestClient(t, h)
+				c.RegistrationSource = source
+				c.TokenEndpointAuthMethod = method
+				c.SecretHash = "registered-secret-hash"
+				if err := h.Stores.Client.Update(t.Context(), c); err != nil {
+					t.Fatal(err)
+				}
+				req := validAuthorizeRequest(c)
+				req.CodeChallenge, req.CodeChallengeMethod = "", ""
+				result, err := svc.StartAuthorization(t.Context(), req)
+				if err != nil {
+					t.Fatalf("confidential authorization without PKCE: %v", err)
+				}
+				if !result.LoginRequired || !result.ConsentRequired {
+					t.Fatal("PKCE compatibility bypassed login or consent")
+				}
+			})
+		}
+	}
+}
+
 func TestAuthorize_PlainPKCE_Rejected(t *testing.T) {
 	svc, h := newAuthorizeService(t)
 	c := createTestClient(t, h)
