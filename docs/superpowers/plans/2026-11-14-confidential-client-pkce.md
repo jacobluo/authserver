@@ -32,13 +32,19 @@ Public clients require S256 PKCE. Confidential clients must authenticate using t
 
 ## Task 2: Release
 
-- [ ] Commit/push AuthPlane branch, build Linux binary using Go1.27.4.
-- [ ] Back up deployment and remove obsolete allowlist from runtime YAML while retaining usernames.
-- [ ] Deploy a versioned image with automatic rollback and check identity/key/credential preservation.
-- [ ] Run online confidential no-PKCE smoke and public rejection probe; update local deployment image record.
+- [x] Commit/push AuthPlane branch, build Linux binary using Go1.27.4.
+- [x] Back up deployment and remove obsolete allowlist from runtime YAML while retaining usernames.
+- [x] Deploy a versioned image with automatic rollback and check identity/key/credential preservation.
+- [x] Run online confidential no-PKCE smoke and public rejection probe; update local deployment image record.
 
 ## Verified implementation
 
 Focused tests demonstrated the old allowlist restriction before the change and passed afterward. Independent review found callback-removal redemption and duplicate-verifier ambiguity; both were reproduced by failing tests and fixed. Final `make ci-local`, SQLite adapter/service/API integration tests, focused race tests and docs generation/link checks passed. A separate Go1.27.4 reachable-vulnerability scan found zero reachable vulnerabilities; CI's older Go1.26.6 scan reported standard-library advisories. No dependencies or database schemas changed.
 
 Basic/Form Post transport selection and challenged-code replay retain their baseline behavior. The client-secret replay guarantee applies to unchallenged codes. The removed allowlist must also be removed from deployment YAML; the username map is retained.
+
+## Deployment result
+
+Code commit `65010cf91933b5e4dab817bf5a29dcae7a2aa3c0` was pushed to `codex/oauth2-userinfo` and deployed as `authplane/authserver:fork-oauth2-compat-20261114`. Protected backup: `/opt/authplane-cloud-test/releases/oauth2-compat-20261114/backup`. Health returned 200; users, clients, resources, signing keys and credentials were preserved. Only the obsolete OAuth allowlist was removed from runtime YAML; the UserInfo username map was preserved.
+
+The live confidential-client no-PKCE code, UserInfo, refresh and revoke smoke passed. A separate existing public-client probe without PKCE was refused and issued no code. The smoke parsed but did not follow OneID's callback, so the user's full OneID login remains a separate acceptance check. The integration repository's image record was updated locally without a remote push.
