@@ -30,3 +30,13 @@ Branch: `codex/oauth2-userinfo`, based on `ad4ffa05a7001bcf8c48a531724685f25e156
 - Generated Markdown uses intentional trailing two-space hard breaks. These are retained in generated references.
 
 Local smoke inputs, keys, database and logs are inside the OAuth workspace's ignored `.run/userinfo-20261114/` directory, not source files for submission.
+
+## Publication and deployment
+
+- Published source commit `c54c15c7711aa7eaed9761fbb67ee9a22bb2b7ed` to `origin/codex/oauth2-userinfo` in `jacobluo/authserver`.
+- Deployed `authplane/authserver:fork-userinfo-20261114` to the existing `oauth.mvp100.cn` test instance. The image uses the existing runtime image with the newly built Go 1.27.4 executable; its revision label identifies the source commit.
+- Executable SHA-256: `152b97746335850b13776774e75f22993dcb9075227be5b220a7d83f7cfb1839`.
+- Backed up the SQLite database, signing keys, Compose file and environment before deployment. The database backup passed `PRAGMA integrity_check`. Verified the user/client/resource records, key files, application configuration and credentials were unchanged by the image switch.
+- Public HTTPS verification passed using the dedicated existing OneID OAuth2 client: browser login and consent, authorization-code + PKCE S256, form-post credentials, both UserInfo paths returning the expected four profile fields, refresh, and rejection of both access tokens after refresh-family revocation. Missing/invalid tokens returned 401; query-string tokens returned 400.
+- The smoke test parsed the registered OneID callback without following it. This verifies the deployed AuthPlane endpoints, not a full login initiated by OneID. OneID must still be configured to send PKCE S256.
+- The server retains the previous image and a protected backup with a rollback script. Deployment and online-smoke manifests are saved under the OAuth workspace's ignored `.run/userinfo-20261114/` directory.

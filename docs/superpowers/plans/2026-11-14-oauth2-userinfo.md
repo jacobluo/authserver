@@ -41,7 +41,7 @@
 - [x] Build the native and Linux amd64 executables.
 - [x] Verify the real native executable using an isolated local SQLite database, including login, consent, authorization-code + PKCE, profile and revocation.
 - [x] Complete the initially requested local delivery.
-- [ ] Push the tested feature branch and deploy the existing test instance, following the user's subsequent authorization.
+- [x] Push the tested feature branch and deploy the existing test instance, following the user's subsequent authorization.
 
 ## Review and verification record
 
